@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encontre seu Ônibus</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+        
+        .search-section, .admin-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .section-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .icon {
+            width: 24px;
+            height: 24px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76,175,80,0.1);
+        }
+        
+        button {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76,175,80,0.4);
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            border-left: 5px solid #4CAF50;
+            display: none;
+        }
+        
+        .bus-card {
+            background: linear-gradient(45deg, #2196F3, #21CBF3);
+            color: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .bus-number {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .bus-route {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+        
+        .distance {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 10px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 0.8em;
+        }
+        
+        .routes-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 10px;
+            margin-top: 15px;
+        }
+        
+        .route-item {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 3px solid #4CAF50;
+            font-size: 0.9em;
+        }
+        
+        .route-number {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 20px;
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+        
+        .upload-area {
+            border: 2px dashed #4CAF50;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            background: #f0f8f0;
+            margin-top: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-area:hover {
+            background: #e8f5e8;
+        }
+        
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚌 Encontre seu Ônibus</h1>
+            <p>Digite seu endereço e descubra qual linha te leva ao destino</p>
+        </div>
+        
+        <div class="main-content">
+            <!-- Seção de Busca -->
+            <div class="search-section">
+                <h2 class="section-title">
+                    <span class="icon"></span>
+                    Buscar Rota
+                </h2>
+                
+                <div class="form-group">
+                    <label for="userAddress">Seu endereço atual:</label>
+                    <input type="text" id="userAddress" placeholder="Ex: Rua das Flores, 123">
+                </div>
+                
+                <div class="form-group">
+                    <label for="destination">Destino (opcional):</label>
+                    <input type="text" id="destination" placeholder="Ex: Centro da cidade">
+                </div>
+                
+                <button onclick="findBuses()">🔍 Encontrar Ônibus</button>
+                
+                <div id="searchResult" class="result">
+                    <h3>Ônibus Recomendados:</h3>
+                    <div id="busResults"></div>
+                </div>
+            </div>
+            
+            <!-- Seção Administrativa -->
+            <div class="admin-section">
+                <h2 class="section-title">
+                    <span class="icon"></span>
+                    Gerenciar Rotas
+                </h2>
+                
+                <div class="form-group">
+                    <label for="busNumber">Número do Ônibus:</label>
+                    <input type="text" id="busNumber" placeholder="Ex: 101">
+                </div>
+                
+                <div class="form-group">
+                    <label for="busRoute">Nome da Rota:</label>
+                    <input type="text" id="busRoute" placeholder="Ex: Centro - Terminal">
+                </div>
+                
+                <div class="form-group">
+                    <label for="busStops">Endereços da Rota (um por linha):</label>
+                    <textarea id="busStops" rows="5" placeholder="Rua A, 100&#10;Avenida B, 200&#10;Praça C, s/n"></textarea>
+                </div>
+                
+                <button onclick="addBusRoute()">➕ Adicionar Rota</button>
+                
+                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <p>📁 Clique para importar arquivo CSV</p>
+                    <small>Formato: Número,Rota,Endereços</small>
+                    <input type="file" id="fileInput" accept=".csv" style="display: none;" onchange="importCSV(event)">
+                </div>
+                
+                <div id="successMessage" class="success-message">
+                    Rota adicionada com sucesso!
+                </div>
+                
+                <div class="routes-list">
+                    <h4>Rotas Cadastradas:</h4>
+                    <div id="routesList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Banco de dados em memória para as rotas
+        let busRoutes = [
+            {
+                number: "101",
+                route: "Centro - Terminal Sul",
+                stops: [
+                    "Praça da Sé, Centro",
+                    "Rua XV de Novembro, 500",
+                    "Avenida Paulista, 1000",
+                    "Terminal Sul"
+                ]
+            },
+            {
+                number: "202",
+                route: "Bairro Norte - Shopping",
+                stops: [
+                    "Bairro Norte, Rua A",
+                    "Avenida Principal, 200",
+                    "Centro Comercial",
+                    "Shopping Center"
+                ]
+            }
+        ];
+
+        // Função para calcular similaridade entre endereços
+        function calculateSimilarity(address1, address2) {
+            const normalize = (str) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const norm1 = normalize(address1);
+            const norm2 = normalize(address2);
+            
+            if (norm1.includes(norm2) || norm2.includes(norm1)) {
+                return 0.8;
+            }
+            
+            const words1 = norm1.split(' ');
+            const words2 = norm2.split(' ');
+            let matches = 0;
+            
+            words1.forEach(word1 => {
+                words2.forEach(word2 => {
+                    if (word1 === word2 && word1.length > 2) {
+                        matches++;
+                    }
+                });
+            });
+            
+            return matches / Math.max(words1.length, words2.length);
+        }
+
+        // Função para encontrar ônibus
+        function findBuses() {
+            const userAddress = document.getElementById('userAddress').value.trim();
+            const destination = document.getElementById('destination').value.trim();
+            
+            if (!userAddress) {
+                alert('Por favor, digite seu endereço atual.');
+                return;
+            }
+            
+            const results = [];
+            
+            busRoutes.forEach(bus => {
+                let bestScore = 0;
+                let matchType = '';
+                
+                bus.stops.forEach(stop => {
+                    const score = calculateSimilarity(userAddress, stop);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        matchType = 'origem';
+                    }
+                    
+                    if (destination) {
+                        const destScore = calculateSimilarity(destination, stop);
+                        if (destScore > bestScore) {
+                            bestScore = destScore;
+                            matchType = 'destino';
+                        }
+                    }
+                });
+                
+                if (bestScore > 0.3) {
+                    results.push({
+                        bus: bus,
+                        score: bestScore,
+                        matchType: matchType
+                    });
+                }
+            });
+            
+            results.sort((a, b) => b.score - a.score);
+            
+            displayResults(results);
+        }
+
+        // Função para exibir resultados
+        function displayResults(results) {
+            const resultDiv = document.getElementById('searchResult');
+            const busResults = document.getElementById('busResults');
+            
+            if (results.length === 0) {
+                busResults.innerHTML = '<p style="color: #666;">Nenhum ônibus encontrado para este endereço. Verifique se digitou corretamente ou entre em contato conosco.</p>';
+            } else {
+                busResults.innerHTML = results.map(result => {
+                    const confidence = Math.round(result.score * 100);
+                    return `
+                        <div class="bus-card">
+                            <div class="bus-number">Linha ${result.bus.number}</div>
+                            <div class="bus-route">${result.bus.route}</div>
+                            <div class="distance">Compatibilidade: ${confidence}%</div>
+                            <small>Pontos: ${result.bus.stops.join(' → ')}</small>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            resultDiv.style.display = 'block';
+        }
+
+        // Função para adicionar nova rota
+        function addBusRoute() {
+            const number = document.getElementById('busNumber').value.trim();
+            const route = document.getElementById('busRoute').value.trim();
+            const stops = document.getElementById('busStops').value.trim();
+            
+            if (!number || !route || !stops) {
+                alert('Por favor, preencha todos os campos.');
+                return;
+            }
+            
+            const stopsArray = stops.split('\n').map(stop => stop.trim()).filter(stop => stop);
+            
+            if (stopsArray.length < 2) {
+                alert('Por favor, adicione pelo menos 2 endereços na rota.');
+                return;
+            }
+            
+            busRoutes.push({
+                number: number,
+                route: route,
+                stops: stopsArray
+            });
+            
+            // Limpar formulário
+            document.getElementById('busNumber').value = '';
+            document.getElementById('busRoute').value = '';
+            document.getElementById('busStops').value = '';
+            
+            // Mostrar mensagem de sucesso
+            const successMsg = document.getElementById('successMessage');
+            successMsg.style.display = 'block';
+            setTimeout(() => {
+                successMsg.style.display = 'none';
+            }, 3000);
+            
+            updateRoutesList();
+        }
+
+        // Função para importar CSV
+        function importCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n');
+                
+                lines.forEach((line, index) => {
+                    if (line.trim() && index > 0) { // Pular cabeçalho
+                        const parts = line.split(',');
+                        if (parts.length >= 3) {
+                            const number = parts[0].trim();
+                            const route = parts[1].trim();
+                            const stops = parts.slice(2).map(stop => stop.trim()).filter(stop => stop);
+                            
+                            if (number && route && stops.length > 0) {
+                                busRoutes.push({
+                                    number: number,
+                                    route: route,
+                                    stops: stops
+                                });
+                            }
+                        }
+                    }
+                });
+                
+                updateRoutesList();
+                
+                const successMsg = document.getElementById('successMessage');
+                successMsg.textContent = 'Arquivo importado com sucesso!';
+                successMsg.style.display = 'block';
+                setTimeout(() => {
+                    successMsg.style.display = 'none';
+                }, 3000);
+            };
+            
+            reader.readAsText(file);
+        }
+
+        // Função para atualizar lista de rotas
+        function updateRoutesList() {
+            const routesList = document.getElementById('routesList');
+            
+            if (busRoutes.length === 0) {
+                routesList.innerHTML = '<p style="color: #666;">Nenhuma rota cadastrada.</p>';
+                return;
+            }
+            
+            routesList.innerHTML = busRoutes.map(bus => `
+                <div class="route-item">
+                    <span class="route-number">Linha ${bus.number}</span> - ${bus.route}
+                    <br><small>${bus.stops.length} paradas cadastradas</small>
+                </div>
+            `).join('');
+        }
+
+        // Inicializar a lista de rotas ao carregar a página
+        document.addEventListener('DOMContentLoaded', function() {
+            updateRoutesList();
+        });
+    </script>
+</body>
+</html>
