@@ -416,8 +416,31 @@
                     <input type="file" id="fileInput" accept=".csv" style="display: none;" onchange="importCSV(event)">
                 </div>
                 
+                <!-- Botões de gerenciamento de dados -->
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button onclick="exportData()" style="background: linear-gradient(45deg, #FF9800, #FFB74D); font-size: 14px; padding: 8px 15px;">
+                        📤 Exportar Backup
+                    </button>
+                    <button onclick="clearAllData()" style="background: linear-gradient(45deg, #f44336, #e57373); font-size: 14px; padding: 8px 15px;">
+                        🗑️ Limpar Tudo
+                    </button>
+                </div>
+                
                 <div id="successMessage" class="success-message">
                     Rota adicionada com sucesso!
+                </div>
+                
+                <!-- Informações sobre armazenamento -->
+                <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-top: 15px; border-left: 4px solid #2196F3;">
+                    <h4 style="margin: 0 0 10px 0; color: #1976D2;">💾 Armazenamento Local Ativo</h4>
+                    <p style="margin: 0; font-size: 0.9em; color: #555;">
+                        ✅ Suas rotas são salvas automaticamente no navegador<br>
+                        ✅ Dados persistem mesmo após fechar/atualizar a página<br>
+                        ✅ Funciona offline - não precisa de internet para consultar
+                    </p>
+                    <small style="color: #666; font-style: italic;">
+                        💡 Dica: Faça backup regularmente usando o botão "Exportar Backup"
+                    </small>
                 </div>
                 
                 <div class="routes-list">
@@ -445,29 +468,112 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 
     <script>
-        // Banco de dados em memória para as rotas
-        let busRoutes = [
-            {
-                number: "101",
-                route: "Centro - Terminal Sul",
-                stops: [
-                    "Praça da Sé, Centro",
-                    "Rua XV de Novembro, 500",
-                    "Avenida Paulista, 1000",
-                    "Terminal Sul"
-                ]
-            },
-            {
-                number: "202",
-                route: "Bairro Norte - Shopping",
-                stops: [
-                    "Bairro Norte, Rua A",
-                    "Avenida Principal, 200",
-                    "Centro Comercial",
-                    "Shopping Center"
-                ]
+        // Sistema de armazenamento de dados
+        class BusRouteStorage {
+            constructor() {
+                this.storageKey = 'busRoutes_app';
+                this.routes = this.loadRoutes();
             }
-        ];
+            
+            // Carregar rotas do armazenamento
+            loadRoutes() {
+                try {
+                    const saved = localStorage.getItem(this.storageKey);
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        console.log('✅ Rotas carregadas:', parsed.length, 'rotas encontradas');
+                        return parsed;
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao carregar rotas:', error);
+                }
+                
+                // Rotas de exemplo (apenas na primeira vez)
+                const defaultRoutes = [
+                    {
+                        number: "101",
+                        route: "Centro - Terminal Sul",
+                        stops: [
+                            "Praça da Sé, Centro",
+                            "Rua XV de Novembro, 500",
+                            "Avenida Paulista, 1000",
+                            "Terminal Sul"
+                        ]
+                    },
+                    {
+                        number: "202",
+                        route: "Bairro Norte - Shopping",
+                        stops: [
+                            "Bairro Norte, Rua A",
+                            "Avenida Principal, 200",
+                            "Centro Comercial",
+                            "Shopping Center"
+                        ]
+                    }
+                ];
+                
+                this.saveRoutes(defaultRoutes);
+                return defaultRoutes;
+            }
+            
+            // Salvar rotas no armazenamento
+            saveRoutes(routes = null) {
+                try {
+                    const routesToSave = routes || this.routes;
+                    localStorage.setItem(this.storageKey, JSON.stringify(routesToSave));
+                    console.log('💾 Rotas salvas:', routesToSave.length, 'rotas');
+                    return true;
+                } catch (error) {
+                    console.error('❌ Erro ao salvar rotas:', error);
+                    return false;
+                }
+            }
+            
+            // Adicionar nova rota
+            addRoute(route) {
+                this.routes.push(route);
+                this.saveRoutes();
+                return this.routes.length - 1;
+            }
+            
+            // Remover rota
+            removeRoute(index) {
+                if (index >= 0 && index < this.routes.length) {
+                    this.routes.splice(index, 1);
+                    this.saveRoutes();
+                    return true;
+                }
+                return false;
+            }
+            
+            // Obter todas as rotas
+            getAllRoutes() {
+                return this.routes;
+            }
+            
+            // Limpar todas as rotas
+            clearAllRoutes() {
+                this.routes = [];
+                this.saveRoutes();
+            }
+            
+            // Importar rotas de CSV
+            importRoutes(newRoutes) {
+                newRoutes.forEach(route => {
+                    this.routes.push(route);
+                });
+                this.saveRoutes();
+            }
+            
+            // Exportar rotas para backup
+            exportRoutes() {
+                return JSON.stringify(this.routes, null, 2);
+            }
+        }
+        
+        // Inicializar sistema de armazenamento
+        const storage = new BusRouteStorage();
+        let busRoutes = storage.getAllRoutes();
 
         // Função para calcular similaridade entre endereços
         function calculateSimilarity(address1, address2) {
@@ -582,11 +688,26 @@
                 return;
             }
             
-            busRoutes.push({
+            // Verificar se já existe rota com mesmo número
+            const existingRoute = busRoutes.find(r => r.number === number);
+            if (existingRoute) {
+                if (!confirm(`Já existe uma rota com o número ${number}. Deseja substituir?`)) {
+                    return;
+                }
+                // Remover rota existente
+                const index = busRoutes.findIndex(r => r.number === number);
+                storage.removeRoute(index);
+                busRoutes = storage.getAllRoutes();
+            }
+            
+            const newRoute = {
                 number: number,
                 route: route,
                 stops: stopsArray
-            });
+            };
+            
+            storage.addRoute(newRoute);
+            busRoutes = storage.getAllRoutes();
             
             // Limpar formulário
             document.getElementById('busNumber').value = '';
@@ -594,11 +715,7 @@
             document.getElementById('busStops').value = '';
             
             // Mostrar mensagem de sucesso
-            const successMsg = document.getElementById('successMessage');
-            successMsg.style.display = 'block';
-            setTimeout(() => {
-                successMsg.style.display = 'none';
-            }, 3000);
+            showSuccessMessage('Rota adicionada e salva com sucesso! 💾');
             
             updateRoutesList();
         }
@@ -612,6 +729,7 @@
             reader.onload = function(e) {
                 const text = e.target.result;
                 const lines = text.split('\n');
+                let importedCount = 0;
                 
                 lines.forEach((line, index) => {
                     if (line.trim() && index > 0) { // Pular cabeçalho
@@ -622,27 +740,76 @@
                             const stops = parts.slice(2).map(stop => stop.trim()).filter(stop => stop);
                             
                             if (number && route && stops.length > 0) {
-                                busRoutes.push({
+                                const newRoute = {
                                     number: number,
                                     route: route,
                                     stops: stops
-                                });
+                                };
+                                storage.addRoute(newRoute);
+                                importedCount++;
                             }
                         }
                     }
                 });
                 
+                busRoutes = storage.getAllRoutes();
                 updateRoutesList();
                 
-                const successMsg = document.getElementById('successMessage');
-                successMsg.textContent = 'Arquivo importado com sucesso!';
-                successMsg.style.display = 'block';
-                setTimeout(() => {
-                    successMsg.style.display = 'none';
-                }, 3000);
+                showSuccessMessage(`${importedCount} rotas importadas e salvas com sucesso! 📁💾`);
             };
             
             reader.readAsText(file);
+        }
+
+        // Função para excluir rota
+        function deleteRoute(index) {
+            const route = busRoutes[index];
+            if (confirm(`Tem certeza que deseja excluir a rota ${route.number} - ${route.route}?`)) {
+                storage.removeRoute(index);
+                busRoutes = storage.getAllRoutes();
+                updateRoutesList();
+                
+                showSuccessMessage('Rota excluída com sucesso! 🗑️');
+            }
+        }
+
+        // Função para mostrar mensagem de sucesso
+        function showSuccessMessage(message) {
+            const successMsg = document.getElementById('successMessage');
+            successMsg.textContent = message;
+            successMsg.style.display = 'block';
+            setTimeout(() => {
+                successMsg.style.display = 'none';
+            }, 4000);
+        }
+
+        // Função para exportar dados (backup)
+        function exportData() {
+            const data = storage.exportRoutes();
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_rotas_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showSuccessMessage('Backup exportado com sucesso! 📤');
+        }
+
+        // Função para limpar todos os dados
+        function clearAllData() {
+            if (confirm('⚠️ ATENÇÃO: Isso irá apagar TODAS as rotas cadastradas permanentemente. Tem certeza?')) {
+                if (confirm('🔴 ÚLTIMA CONFIRMAÇÃO: Todos os dados serão perdidos. Continuar?')) {
+                    storage.clearAllRoutes();
+                    busRoutes = storage.getAllRoutes();
+                    updateRoutesList();
+                    
+                    showSuccessMessage('Todos os dados foram limpos! 🗑️');
+                }
+            }
         }
 
         // Função para atualizar lista de rotas
@@ -675,16 +842,13 @@
 
         // Função para excluir rota
         function deleteRoute(index) {
-            if (confirm('Tem certeza que deseja excluir esta rota?')) {
-                busRoutes.splice(index, 1);
+            const route = busRoutes[index];
+            if (confirm(`Tem certeza que deseja excluir a rota ${route.number} - ${route.route}?`)) {
+                storage.removeRoute(index);
+                busRoutes = storage.getAllRoutes();
                 updateRoutesList();
                 
-                const successMsg = document.getElementById('successMessage');
-                successMsg.textContent = 'Rota excluída com sucesso!';
-                successMsg.style.display = 'block';
-                setTimeout(() => {
-                    successMsg.style.display = 'none';
-                }, 3000);
+                showSuccessMessage('Rota excluída com sucesso! 🗑️');
             }
         }
 
