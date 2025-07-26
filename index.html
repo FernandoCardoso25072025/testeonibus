@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Encontre seu Ônibus</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <style>
         * {
             margin: 0;
@@ -159,7 +160,7 @@
         }
         
         .routes-list {
-            max-height: 300px;
+            max-height: 400px;
             overflow-y: auto;
             border: 1px solid #ddd;
             border-radius: 10px;
@@ -351,6 +352,24 @@
             margin-top: 10px;
             display: none;
         }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            margin-bottom: 5px;
+            display: inline-block;
+        }
+        
+        .status-exact { background: #4CAF50; color: white; }
+        .status-close { background: #FF9800; color: white; }
+        .status-far { background: #2196F3; color: white; }
     </style>
 </head>
 <body>
@@ -378,7 +397,7 @@
                     <input type="text" id="destination" placeholder="Ex: Centro da cidade">
                 </div>
                 
-                <button onclick="findBuses()">🔍 Encontrar Ônibus</button>
+                <button onclick="searchBuses()">🔍 Encontrar Ônibus</button>
                 
                 <div id="searchResult" class="result">
                     <h3>Ônibus Recomendados:</h3>
@@ -408,39 +427,34 @@
                     <textarea id="busStops" rows="5" placeholder="Rua A, 100&#10;Avenida B, 200&#10;Praça C, s/n"></textarea>
                 </div>
                 
-                <button onclick="addBusRoute()">➕ Adicionar Rota</button>
+                <button onclick="addRoute()">➕ Adicionar Rota</button>
                 
                 <div class="upload-area" onclick="document.getElementById('fileInput').click()">
                     <p>📁 Clique para importar arquivo CSV</p>
                     <small>Formato: Número,Rota,Endereços</small>
-                    <input type="file" id="fileInput" accept=".csv" style="display: none;" onchange="importCSV(event)">
+                    <input type="file" id="fileInput" accept=".csv" style="display: none;" onchange="importFile(event)">
                 </div>
                 
-                <!-- Botões de gerenciamento de dados -->
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button onclick="exportData()" style="background: linear-gradient(45deg, #FF9800, #FFB74D); font-size: 14px; padding: 8px 15px;">
-                        📤 Exportar Backup
+                    <button onclick="exportBackup()" style="background: linear-gradient(45deg, #FF9800, #FFB74D); font-size: 14px; padding: 8px 15px;">
+                        📤 Exportar
                     </button>
-                    <button onclick="clearAllData()" style="background: linear-gradient(45deg, #f44336, #e57373); font-size: 14px; padding: 8px 15px;">
-                        🗑️ Limpar Tudo
+                    <button onclick="clearAll()" style="background: linear-gradient(45deg, #f44336, #e57373); font-size: 14px; padding: 8px 15px;">
+                        🗑️ Limpar
                     </button>
                 </div>
                 
                 <div id="successMessage" class="success-message">
-                    Rota adicionada com sucesso!
+                    Operação realizada com sucesso!
                 </div>
                 
-                <!-- Informações sobre armazenamento -->
                 <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-top: 15px; border-left: 4px solid #2196F3;">
-                    <h4 style="margin: 0 0 10px 0; color: #1976D2;">💾 Armazenamento Local Ativo</h4>
+                    <h4 style="margin: 0 0 10px 0; color: #1976D2;">💾 Armazenamento Local</h4>
                     <p style="margin: 0; font-size: 0.9em; color: #555;">
-                        ✅ Suas rotas são salvas automaticamente no navegador<br>
-                        ✅ Dados persistem mesmo após fechar/atualizar a página<br>
-                        ✅ Funciona offline - não precisa de internet para consultar
+                        ✅ Dados salvos automaticamente<br>
+                        ✅ Funciona offline<br>
+                        ✅ Backup recomendado
                     </p>
-                    <small style="color: #666; font-style: italic;">
-                        💡 Dica: Faça backup regularmente usando o botão "Exportar Backup"
-                    </small>
                 </div>
                 
                 <div class="routes-list">
@@ -451,12 +465,12 @@
         </div>
     </div>
 
-    <!-- Modal para o Mapa -->
+    <!-- Modal do Mapa -->
     <div id="mapModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="modalTitle">🗺️ Trajeto da Linha</h3>
-                <button class="close" onclick="closeMap()">&times;</button>
+                <h3 id="modalTitle">🗺️ Mapa</h3>
+                <button class="close" onclick="closeModal()">&times;</button>
             </div>
             <div class="modal-body">
                 <div id="map"></div>
@@ -465,624 +479,222 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-
     <script>
-        // Sistema de armazenamento de dados
-        class BusRouteStorage {
-            constructor() {
-                this.storageKey = 'busRoutes_app';
-                this.routes = this.loadRoutes();
-            }
+        // Variáveis globais
+        let busRoutes = [];
+        let currentMap = null;
+        let searchResults = null;
+
+        // Armazenamento local
+        const Storage = {
+            key: 'busRoutes_data',
             
-            // Carregar rotas do armazenamento
-            loadRoutes() {
+            save: function(data) {
                 try {
-                    const saved = localStorage.getItem(this.storageKey);
-                    if (saved) {
-                        const parsed = JSON.parse(saved);
-                        console.log('✅ Rotas carregadas:', parsed.length, 'rotas encontradas');
-                        return parsed;
-                    }
-                } catch (error) {
-                    console.error('❌ Erro ao carregar rotas:', error);
+                    localStorage.setItem(this.key, JSON.stringify(data));
+                    return true;
+                } catch (e) {
+                    console.error('Erro ao salvar:', e);
+                    return false;
                 }
-                
-                // Rotas de exemplo (apenas na primeira vez)
-                const defaultRoutes = [
+            },
+            
+            load: function() {
+                try {
+                    const data = localStorage.getItem(this.key);
+                    return data ? JSON.parse(data) : this.getDefault();
+                } catch (e) {
+                    console.error('Erro ao carregar:', e);
+                    return this.getDefault();
+                }
+            },
+            
+            getDefault: function() {
+                return [
                     {
                         number: "101",
                         route: "Centro - Terminal Sul",
                         stops: [
                             "Praça da Sé, Centro",
-                            "Rua XV de Novembro, 500",
+                            "Rua XV de Novembro, 500", 
                             "Avenida Paulista, 1000",
                             "Terminal Sul"
                         ]
                     },
                     {
-                        number: "202",
+                        number: "202", 
                         route: "Bairro Norte - Shopping",
                         stops: [
                             "Bairro Norte, Rua A",
                             "Avenida Principal, 200",
-                            "Centro Comercial",
+                            "Centro Comercial", 
                             "Shopping Center"
                         ]
                     }
                 ];
+            }
+        };
+
+        // Utilitários matemáticos
+        const GeoUtils = {
+            distance: function(lat1, lon1, lat2, lon2) {
+                const R = 6371;
+                const dLat = (lat2 - lat1) * Math.PI / 180;
+                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                        Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                return R * c;
+            },
+            
+            similarity: function(str1, str2) {
+                const normalize = (s) => s.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+                const n1 = normalize(str1);
+                const n2 = normalize(str2);
                 
-                this.saveRoutes(defaultRoutes);
-                return defaultRoutes;
-            }
-            
-            // Salvar rotas no armazenamento
-            saveRoutes(routes = null) {
-                try {
-                    const routesToSave = routes || this.routes;
-                    localStorage.setItem(this.storageKey, JSON.stringify(routesToSave));
-                    console.log('💾 Rotas salvas:', routesToSave.length, 'rotas');
-                    return true;
-                } catch (error) {
-                    console.error('❌ Erro ao salvar rotas:', error);
-                    return false;
-                }
-            }
-            
-            // Adicionar nova rota
-            addRoute(route) {
-                this.routes.push(route);
-                this.saveRoutes();
-                return this.routes.length - 1;
-            }
-            
-            // Remover rota
-            removeRoute(index) {
-                if (index >= 0 && index < this.routes.length) {
-                    this.routes.splice(index, 1);
-                    this.saveRoutes();
-                    return true;
-                }
-                return false;
-            }
-            
-            // Obter todas as rotas
-            getAllRoutes() {
-                return this.routes;
-            }
-            
-            // Limpar todas as rotas
-            clearAllRoutes() {
-                this.routes = [];
-                this.saveRoutes();
-            }
-            
-            // Importar rotas de CSV
-            importRoutes(newRoutes) {
-                newRoutes.forEach(route => {
-                    this.routes.push(route);
-                });
-                this.saveRoutes();
-            }
-            
-            // Exportar rotas para backup
-            exportRoutes() {
-                return JSON.stringify(this.routes, null, 2);
-            }
-        }
-        
-        // Inicializar sistema de armazenamento
-        const storage = new BusRouteStorage();
-        let busRoutes = storage.getAllRoutes();
-
-        // Função para calcular distância entre dois pontos (em km)
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371; // Raio da Terra em km
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                    Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
-        }
-
-        // Função para calcular distância de Levenshtein
-        function levenshteinDistance(str1, str2) {
-            const matrix = [];
-            for (let i = 0; i <= str2.length; i++) {
-                matrix[i] = [i];
-            }
-            for (let j = 0; j <= str1.length; j++) {
-                matrix[0][j] = j;
-            }
-            for (let i = 1; i <= str2.length; i++) {
-                for (let j = 1; j <= str1.length; j++) {
-                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-                        matrix[i][j] = matrix[i - 1][j - 1];
-                    } else {
-                        matrix[i][j] = Math.min(
-                            matrix[i - 1][j - 1] + 1,
-                            matrix[i][j - 1] + 1,
-                            matrix[i - 1][j] + 1
-                        );
-                    }
-                }
-            }
-            return matrix[str2.length][str1.length];
-        }
-
-        // Função para calcular similaridade entre endereços (melhorada)
-        function calculateSimilarity(address1, address2) {
-            const normalize = (str) => str.toLowerCase()
-                .replace(/[^\w\s]/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-            
-            const norm1 = normalize(address1);
-            const norm2 = normalize(address2);
-            
-            // Verificar correspondência exata ou contém
-            if (norm1.includes(norm2) || norm2.includes(norm1)) {
-                return 0.9;
-            }
-            
-            const words1 = norm1.split(' ').filter(w => w.length > 2);
-            const words2 = norm2.split(' ').filter(w => w.length > 2);
-            
-            let matches = 0;
-            let totalWords = Math.max(words1.length, words2.length);
-            
-            words1.forEach(word1 => {
-                words2.forEach(word2 => {
-                    if (word1 === word2) {
-                        matches++;
-                    } else if (word1.includes(word2) || word2.includes(word1)) {
-                        matches += 0.7;
-                    } else if (levenshteinDistance(word1, word2) <= 2 && word1.length > 3) {
-                        matches += 0.5;
-                    }
-                });
-            });
-            
-            return Math.min(matches / totalWords, 1);
-        }
-
-        // Função para encontrar ônibus
-        function findBuses() {
-            const userAddress = document.getElementById('userAddress').value.trim();
-            const destination = document.getElementById('destination').value.trim();
-            
-            if (!userAddress) {
-                alert('Por favor, digite seu endereço atual.');
-                return;
-            }
-            
-            const results = [];
-            
-            busRoutes.forEach(bus => {
-                let bestScore = 0;
-                let matchType = '';
+                if (n1.includes(n2) || n2.includes(n1)) return 0.9;
                 
-                bus.stops.forEach(stop => {
-                    const score = calculateSimilarity(userAddress, stop);
-                    if (score > bestScore) {
-                        bestScore = score;
-                        matchType = 'origem';
-                    }
-                    
-                    if (destination) {
-                        const destScore = calculateSimilarity(destination, stop);
-                        if (destScore > bestScore) {
-                            bestScore = destScore;
-                            matchType = 'destino';
-                        }
-                    }
-                });
+                const words1 = n1.split(' ').filter(w => w.length > 2);
+                const words2 = n2.split(' ').filter(w => w.length > 2);
                 
-                if (bestScore > 0.3) {
-                    results.push({
-                        bus: bus,
-                        score: bestScore,
-                        matchType: matchType
+                let matches = 0;
+                const total = Math.max(words1.length, words2.length);
+                
+                words1.forEach(w1 => {
+                    words2.forEach(w2 => {
+                        if (w1 === w2) matches++;
+                        else if (w1.includes(w2) || w2.includes(w1)) matches += 0.7;
                     });
-                }
-            });
-            
-            results.sort((a, b) => b.score - a.score);
-            
-            displayResults(results);
-        }
+                });
+                
+                return Math.min(matches / total, 1);
+            }
+        };
 
-        // Função para exibir resultados inteligentes com mapa
-        function displaySmartResults(results, userAddress, userCoords) {
-            const resultDiv = document.getElementById('searchResult');
-            const busResults = document.getElementById('busResults');
-            
-            if (results.length === 0) {
-                busResults.innerHTML = `
-                    <div style="text-align: center; padding: 20px; color: #666;">
-                        <div style="font-size: 1.2em; margin-bottom: 10px;">😔 Nenhum ônibus encontrado</div>
-                        <p>Não encontramos rotas próximas ao endereço:<br><strong>${userAddress}</strong></p>
-                        <small>Tente verificar se o endereço está correto ou entre em contato conosco.</small>
-                    </div>
-                `;
-                return;
-            }
-            
-            // Criar HTML dos resultados
-            const resultsHTML = results.map((result, index) => {
-                const confidence = Math.round(result.score * 100);
-                const distanceText = result.distance < 1 ? 
-                    `${Math.round(result.distance * 1000)}m` : 
-                    `${result.distance.toFixed(1)}km`;
-                
-                let matchIcon = '📍';
-                let matchText = 'Próximo';
-                let matchColor = '#2196F3';
-                
-                if (result.matchType === 'endereço') {
-                    matchIcon = '✅';
-                    matchText = 'Passa no local';
-                    matchColor = '#4CAF50';
-                } else if (result.matchType === 'destino') {
-                    matchIcon = '🎯';
-                    matchText = 'Vai ao destino';
-                    matchColor = '#FF9800';
-                } else if (result.distance <= 0.5) {
-                    matchIcon = '🚶‍♂️';
-                    matchText = 'Muito próximo';
-                    matchColor = '#4CAF50';
-                } else if (result.distance <= 1) {
-                    matchIcon = '🚶‍♂️';
-                    matchText = 'Caminhada curta';
-                    matchColor = '#FF9800';
+        // API de geocodificação
+        const GeoAPI = {
+            async geocode(address) {
+                try {
+                    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    if (data.length > 0) {
+                        return {
+                            lat: parseFloat(data[0].lat),
+                            lng: parseFloat(data[0].lon),
+                            name: data[0].display_name
+                        };
+                    }
+                    return null;
+                } catch (error) {
+                    console.error('Erro na geocodificação:', error);
+                    return null;
                 }
-                
-                return `
-                    <div class="bus-card" style="position: relative;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div>
-                                <div class="bus-number">Linha ${result.bus.number}</div>
-                                <div class="bus-route">${result.bus.route}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="background: ${matchColor}; padding: 4px 8px; border-radius: 15px; font-size: 0.8em; margin-bottom: 5px;">
-                                    ${matchIcon} ${matchText}
-                                </div>
-                                <div class="distance">${distanceText} de distância</div>
-                            </div>
-                        </div>
-                        
-                        <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);">
-                            <div style="font-size: 0.9em; opacity: 0.9;">
-                                <strong>Ponto mais próximo:</strong><br>
-                                📍 ${result.closestStop}
-                            </div>
-                        </div>
-                        
-                        <div style="display: flex; gap: 10px; margin-top: 15px;">
-                            <button onclick="showUserLocationMap('${userAddress.replace(/'/g, "\\'")}', ${index})" 
-                                    style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; cursor: pointer; flex: 1;">
-                                🗺️ Ver no Mapa
-                            </button>
-                            <a href="https://www.google.com/maps/dir/${encodeURIComponent(userAddress)}/${encodeURIComponent(result.closestStop)}" 
-                               target="_blank" 
-                               style="background: #2196F3; color: white; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; text-decoration: none; text-align: center; flex: 1;">
-                                🧭 Como Chegar
-                            </a>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            busResults.innerHTML = `
-                <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
-                    <h4 style="margin: 0 0 10px 0; color: #2e7d32;">📍 Endereço Pesquisado:</h4>
-                    <p style="margin: 0; font-weight: 600;">${userAddress}</p>
-                    <small style="color: #666;">Encontramos ${results.length} linha(s) de ônibus próxima(s)</small>
-                </div>
-                ${resultsHTML}
-            `;
-            
-            resultDiv.style.display = 'block';
-            
-            // Armazenar dados para o mapa
-            window.currentSearchResults = {
-                userAddress: userAddress,
-                userCoords: userCoords,
-                results: results
-            };
-        }Stop}
-                            </div>
-                        </div>
-                        
-                        <div style="display: flex; gap: 10px; margin-top: 15px;">
-                            <button onclick="showUserLocationMap('${userAddress}', ${index})" 
-                                    style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; cursor: pointer; flex: 1;">
-                                🗺️ Ver no Mapa
-                            </button>
-                            <a href="https://www.google.com/maps/dir/${encodeURIComponent(userAddress)}/${encodeURIComponent(result.closestStop)}" 
-                               target="_blank" 
-                               style="background: #2196F3; color: white; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; text-decoration: none; text-align: center; flex: 1;">
-                                🧭 Como Chegar
-                            </a>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            busResults.innerHTML = `
-                <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
-                    <h4 style="margin: 0 0 10px 0; color: #2e7d32;">📍 Endereço Pesquisado:</h4>
-                    <p style="margin: 0; font-weight: 600;">${userAddress}</p>
-                    <small style="color: #666;">Encontramos ${results.length} linha(s) de ônibus próxima(s)</small>
-                </div>
-                ${resultsHTML}
-            `;
-            
-            resultDiv.style.display = 'block';
-            
-            // Armazenar dados para o mapa
-            window.currentSearchResults = {
-                userAddress: userAddress,
-                userCoords: userCoords,
-                results: results
-            };
-        }
+            }
+        };
 
-        // Função para adicionar nova rota
-        function addBusRoute() {
-            const number = document.getElementById('busNumber').value.trim();
-            const route = document.getElementById('busRoute').value.trim();
-            const stops = document.getElementById('busStops').value.trim();
-            
-            if (!number || !route || !stops) {
-                alert('Por favor, preencha todos os campos.');
-                return;
-            }
-            
-            const stopsArray = stops.split('\n').map(stop => stop.trim()).filter(stop => stop);
-            
-            if (stopsArray.length < 2) {
-                alert('Por favor, adicione pelo menos 2 endereços na rota.');
-                return;
-            }
-            
-            // Verificar se já existe rota com mesmo número
-            const existingRoute = busRoutes.find(r => r.number === number);
-            if (existingRoute) {
-                if (!confirm(`Já existe uma rota com o número ${number}. Deseja substituir?`)) {
-                    return;
-                }
-                // Remover rota existente
-                const index = busRoutes.findIndex(r => r.number === number);
-                storage.removeRoute(index);
-                busRoutes = storage.getAllRoutes();
-            }
-            
-            const newRoute = {
-                number: number,
-                route: route,
-                stops: stopsArray
-            };
-            
-            storage.addRoute(newRoute);
-            busRoutes = storage.getAllRoutes();
-            
-            // Limpar formulário
-            document.getElementById('busNumber').value = '';
-            document.getElementById('busRoute').value = '';
-            document.getElementById('busStops').value = '';
-            
-            // Mostrar mensagem de sucesso
-            showSuccessMessage('Rota adicionada e salva com sucesso! 💾');
-            
-            updateRoutesList();
-        }
+        // Sistema de busca
+        const BusSearch = {
+            async find(userAddress, destination = '') {
+                const userCoords = await GeoAPI.geocode(userAddress);
+                if (!userCoords) return { error: 'Endereço não encontrado' };
 
-        // Função para importar CSV
-        function importCSV(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const text = e.target.result;
-                const lines = text.split('\n');
-                let importedCount = 0;
+                const results = [];
                 
-                lines.forEach((line, index) => {
-                    if (line.trim() && index > 0) { // Pular cabeçalho
-                        const parts = line.split(',');
-                        if (parts.length >= 3) {
-                            const number = parts[0].trim();
-                            const route = parts[1].trim();
-                            const stops = parts.slice(2).map(stop => stop.trim()).filter(stop => stop);
+                for (const bus of busRoutes) {
+                    let bestMatch = {
+                        score: 0,
+                        type: '',
+                        stop: '',
+                        distance: Infinity,
+                        coords: null,
+                        index: -1
+                    };
+                    
+                    for (let i = 0; i < bus.stops.length; i++) {
+                        const stop = bus.stops[i];
+                        const textScore = GeoUtils.similarity(userAddress, stop);
+                        
+                        const stopCoords = await GeoAPI.geocode(stop);
+                        if (stopCoords) {
+                            const distance = GeoUtils.distance(
+                                userCoords.lat, userCoords.lng,
+                                stopCoords.lat, stopCoords.lng
+                            );
                             
-                            if (number && route && stops.length > 0) {
-                                const newRoute = {
-                                    number: number,
-                                    route: route,
-                                    stops: stops
+                            const proximityScore = Math.max(0, (2 - distance) / 2);
+                            const combinedScore = (textScore * 0.6) + (proximityScore * 0.4);
+                            
+                            if (combinedScore > bestMatch.score || 
+                               (combinedScore === bestMatch.score && distance < bestMatch.distance)) {
+                                bestMatch = {
+                                    score: combinedScore,
+                                    type: textScore > 0.7 ? 'exact' : 'proximity',
+                                    stop: stop,
+                                    distance: distance,
+                                    coords: stopCoords,
+                                    index: i
                                 };
-                                storage.addRoute(newRoute);
-                                importedCount++;
+                            }
+                        }
+                        
+                        if (destination) {
+                            const destScore = GeoUtils.similarity(destination, stop);
+                            if (destScore > bestMatch.score) {
+                                bestMatch.score = destScore;
+                                bestMatch.type = 'destination';
+                                bestMatch.stop = stop;
+                                bestMatch.index = i;
                             }
                         }
                     }
+                    
+                    if (bestMatch.score > 0.1 || bestMatch.distance <= 3) {
+                        results.push({
+                            bus: bus,
+                            match: bestMatch,
+                            userCoords: userCoords
+                        });
+                    }
+                }
+                
+                results.sort((a, b) => {
+                    if (b.match.score !== a.match.score) return b.match.score - a.match.score;
+                    return a.match.distance - b.match.distance;
                 });
                 
-                busRoutes = storage.getAllRoutes();
-                updateRoutesList();
-                
-                showSuccessMessage(`${importedCount} rotas importadas e salvas com sucesso! 📁💾`);
-            };
-            
-            reader.readAsText(file);
-        }
-
-        // Função para excluir rota
-        function deleteRoute(index) {
-            const route = busRoutes[index];
-            if (confirm(`Tem certeza que deseja excluir a rota ${route.number} - ${route.route}?`)) {
-                storage.removeRoute(index);
-                busRoutes = storage.getAllRoutes();
-                updateRoutesList();
-                
-                showSuccessMessage('Rota excluída com sucesso! 🗑️');
+                return { results: results, userCoords: userCoords };
             }
-        }
+        };
 
-        // Função para mostrar mensagem de sucesso
-        function showSuccessMessage(message) {
-            const successMsg = document.getElementById('successMessage');
-            successMsg.textContent = message;
-            successMsg.style.display = 'block';
-            setTimeout(() => {
-                successMsg.style.display = 'none';
-            }, 4000);
-        }
-
-        // Função para exportar dados (backup)
-        function exportData() {
-            const data = storage.exportRoutes();
-            const blob = new Blob([data], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `backup_rotas_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            showSuccessMessage('Backup exportado com sucesso! 📤');
-        }
-
-        // Função para limpar todos os dados
-        function clearAllData() {
-            if (confirm('⚠️ ATENÇÃO: Isso irá apagar TODAS as rotas cadastradas permanentemente. Tem certeza?')) {
-                if (confirm('🔴 ÚLTIMA CONFIRMAÇÃO: Todos os dados serão perdidos. Continuar?')) {
-                    storage.clearAllRoutes();
-                    busRoutes = storage.getAllRoutes();
-                    updateRoutesList();
-                    
-                    showSuccessMessage('Todos os dados foram limpos! 🗑️');
-                }
-            }
-        }
-
-        // Função para atualizar lista de rotas
-        function updateRoutesList() {
-            const routesList = document.getElementById('routesList');
-            
-            if (busRoutes.length === 0) {
-                routesList.innerHTML = '<p style="color: #666;">Nenhuma rota cadastrada.</p>';
-                return;
-            }
-            
-            routesList.innerHTML = busRoutes.map((bus, index) => `
-                <div class="route-item">
-                    <div class="route-number">🚌 Linha ${bus.number}</div> 
-                    <div style="font-weight: 600; margin: 5px 0;">${bus.route}</div>
-                    <div class="stops-preview">
-                        📍 ${bus.stops.length} paradas: ${bus.stops.slice(0, 2).join(' → ')}${bus.stops.length > 2 ? ' → ...' : ''}
-                    </div>
-                    <div class="route-actions">
-                        <button class="btn-map" onclick="showRouteOnMap(${index})">
-                            🗺️ Ver no Mapa
-                        </button>
-                        <button class="btn-delete" onclick="deleteRoute(${index})">
-                            🗑️ Excluir
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        // Função para excluir rota
-        function deleteRoute(index) {
-            const route = busRoutes[index];
-            if (confirm(`Tem certeza que deseja excluir a rota ${route.number} - ${route.route}?`)) {
-                storage.removeRoute(index);
-                busRoutes = storage.getAllRoutes();
-                updateRoutesList();
-                
-                showSuccessMessage('Rota excluída com sucesso! 🗑️');
-            }
-        }
-
-        // Variável global para o mapa
-        let map = null;
-
-        // Função para geocodificar endereço
-        async function geocodeAddress(address) {
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`);
-                const data = await response.json();
-                if (data.length > 0) {
-                    return {
-                        lat: parseFloat(data[0].lat),
-                        lng: parseFloat(data[0].lon),
-                        display_name: data[0].display_name
-                    };
-                }
-                return null;
-            } catch (error) {
-                console.error('Erro ao geocodificar:', error);
-                return null;
-            }
-        }
-
-        // Função para mostrar localização do usuário no mapa
-        async function showUserLocationMap(userAddress, resultIndex) {
-            try {
-                const searchData = window.currentSearchResults;
-                if (!searchData) {
-                    alert('Dados da pesquisa não encontrados. Faça uma nova busca.');
-                    return;
-                }
-                
-                const result = searchData.results[resultIndex];
-                if (!result) {
-                    alert('Resultado não encontrado. Tente novamente.');
-                    return;
-                }
-                
-                const modal = document.getElementById('mapModal');
-                const modalTitle = document.getElementById('modalTitle');
-                
-                modalTitle.innerHTML = `🗺️ ${userAddress} → Linha ${result.bus.number}`;
-                modal.style.display = 'block';
-                
-                // Inicializar mapa se ainda não existe
-                if (!map) {
-                    map = L.map('map').setView([searchData.userCoords.lat, searchData.userCoords.lng], 14);
+        // Sistema de mapas
+        const MapSystem = {
+            init: function() {
+                if (!currentMap) {
+                    currentMap = L.map('map').setView([-25.4284, -49.2733], 12);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                         attribution: '© OpenStreetMap contributors'
-                    }).addTo(map);
+                    }).addTo(currentMap);
                 }
-                
-                // Limpar marcadores anteriores
-                map.eachLayer(function (layer) {
-                    if (layer instanceof L.Marker || layer instanceof L.Polyline) {
-                        map.removeLayer(layer);
-                    }
-                });
-                
-                // Centralizar no usuário
-                map.setView([searchData.userCoords.lat, searchData.userCoords.lng], 14);
-                
-                // Mostrar loading
-                const existingLoading = document.querySelector('#map .loading-overlay');
-                if (existingLoading) {
-                    existingLoading.remove();
+                return currentMap;
+            },
+            
+            clear: function() {
+                if (currentMap) {
+                    currentMap.eachLayer(layer => {
+                        if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+                            currentMap.removeLayer(layer);
+                        }
+                    });
                 }
-                
-                const loadingDiv = document.createElement('div');
-                loadingDiv.className = 'loading-overlay';
-                loadingDiv.style.cssText = `
+            },
+            
+            showLoading: function() {
+                const loading = document.createElement('div');
+                loading.id = 'map-loading';
+                loading.style.cssText = `
                     position: absolute;
                     top: 50%;
                     left: 50%;
@@ -1094,13 +706,139 @@
                     z-index: 1000;
                     text-align: center;
                 `;
-                loadingDiv.innerHTML = '🔄 Carregando mapa personalizado...';
-                document.getElementById('map').appendChild(loadingDiv);
+                loading.innerHTML = '🔄 Carregando mapa...';
+                document.getElementById('map').appendChild(loading);
+            },
+            
+            hideLoading: function() {
+                const loading = document.getElementById('map-loading');
+                if (loading) loading.remove();
+            }
+        };
+
+        // Funções principais
+        async function searchBuses() {
+            const userAddress = document.getElementById('userAddress').value.trim();
+            const destination = document.getElementById('destination').value.trim();
+            
+            if (!userAddress) {
+                alert('Digite seu endereço atual');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('searchResult');
+            const busResults = document.getElementById('busResults');
+            
+            busResults.innerHTML = '<div class="loading">🔍 Procurando ônibus próximos...</div>';
+            resultDiv.style.display = 'block';
+            
+            const searchResult = await BusSearch.find(userAddress, destination);
+            
+            if (searchResult.error) {
+                busResults.innerHTML = `<div style="color: #f44336; text-align: center; padding: 20px;">❌ ${searchResult.error}</div>`;
+                return;
+            }
+            
+            searchResults = searchResult;
+            displayResults(searchResult.results, userAddress);
+        }
+
+        function displayResults(results, userAddress) {
+            const busResults = document.getElementById('busResults');
+            
+            if (results.length === 0) {
+                busResults.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #666;">
+                        <div style="font-size: 1.2em; margin-bottom: 10px;">😔 Nenhum ônibus encontrado</div>
+                        <p>Não encontramos rotas próximas ao endereço:<br><strong>${userAddress}</strong></p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const html = results.map((result, index) => {
+                const distanceText = result.match.distance < 1 ? 
+                    `${Math.round(result.match.distance * 1000)}m` : 
+                    `${result.match.distance.toFixed(1)}km`;
                 
-                // Marcador do usuário (vermelho, maior)
+                let status = { icon: '📍', text: 'Próximo', class: 'status-far' };
+                if (result.match.type === 'exact') {
+                    status = { icon: '✅', text: 'Passa no local', class: 'status-exact' };
+                } else if (result.match.distance <= 0.5) {
+                    status = { icon: '🚶‍♂️', text: 'Muito próximo', class: 'status-exact' };
+                } else if (result.match.distance <= 1) {
+                    status = { icon: '🚶‍♂️', text: 'Caminhada curta', class: 'status-close' };
+                }
+                
+                return `
+                    <div class="bus-card">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <div class="bus-number">Linha ${result.bus.number}</div>
+                                <div class="bus-route">${result.bus.route}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="status-badge ${status.class}">
+                                    ${status.icon} ${status.text}
+                                </div>
+                                <div class="distance">${distanceText}</div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);">
+                            <div style="font-size: 0.9em; opacity: 0.9;">
+                                <strong>Ponto mais próximo:</strong><br>
+                                📍 ${result.match.stop}
+                            </div>
+                        </div>
+                        
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button onclick="showUserMap(${index})" 
+                                    style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; cursor: pointer; flex: 1;">
+                                🗺️ Ver no Mapa
+                            </button>
+                            <a href="https://www.google.com/maps/dir/${encodeURIComponent(userAddress)}/${encodeURIComponent(result.match.stop)}" 
+                               target="_blank" 
+                               style="background: #2196F3; color: white; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; text-decoration: none; text-align: center; flex: 1;">
+                                🧭 Navegação
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            busResults.innerHTML = `
+                <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
+                    <h4 style="margin: 0 0 10px 0; color: #2e7d32;">📍 Busca realizada:</h4>
+                    <p style="margin: 0; font-weight: 600;">${userAddress}</p>
+                    <small style="color: #666;">Encontramos ${results.length} linha(s) próxima(s)</small>
+                </div>
+                ${html}
+            `;
+        }
+
+        async function showUserMap(resultIndex) {
+            if (!searchResults || !searchResults.results[resultIndex]) {
+                alert('Dados não encontrados. Faça uma nova busca.');
+                return;
+            }
+            
+            const result = searchResults.results[resultIndex];
+            const modal = document.getElementById('mapModal');
+            const modalTitle = document.getElementById('modalTitle');
+            
+            modalTitle.textContent = `🗺️ Você → Linha ${result.bus.number}`;
+            modal.style.display = 'block';
+            
+            MapSystem.init();
+            MapSystem.clear();
+            MapSystem.showLoading();
+            
+            try {
+                // Marcador do usuário
                 const userIcon = L.divIcon({
                     html: `<div style="
-                        background-color: #f44336;
+                        background: #f44336;
                         width: 35px;
                         height: 35px;
                         border-radius: 50%;
@@ -1111,247 +849,156 @@
                         justify-content: center;
                         font-size: 16px;
                     ">📍</div>`,
-                    className: 'user-marker',
                     iconSize: [35, 35],
                     iconAnchor: [17, 17]
                 });
                 
-                const userMarker = L.marker([searchData.userCoords.lat, searchData.userCoords.lng], { 
+                const userMarker = L.marker([result.userCoords.lat, result.userCoords.lng], { 
                     icon: userIcon 
-                }).addTo(map);
+                }).addTo(currentMap);
                 
                 userMarker.bindPopup(`
-                    <div style="min-width: 250px;">
+                    <div style="min-width: 200px;">
                         <h4 style="margin: 0 0 10px 0; color: #f44336;">📍 Sua Localização</h4>
-                        <p style="margin: 5px 0; font-weight: 600;">${userAddress}</p>
-                        <small style="color: #666;">${searchData.userCoords.display_name || 'Localização encontrada'}</small>
+                        <p style="margin: 0; font-weight: 600;">${searchResults.userCoords.name || 'Localização encontrada'}</p>
                     </div>
                 `);
                 
-                // Desenhar toda a rota do ônibus
-                const busCoordinates = [];
-                const busMarkers = [userMarker];
+                const allMarkers = [userMarker];
+                const coordinates = [];
                 
+                // Marcadores das paradas
                 for (let i = 0; i < result.bus.stops.length; i++) {
                     const stop = result.bus.stops[i];
-                    try {
-                        const coords = await geocodeAddress(stop);
+                    const coords = await GeoAPI.geocode(stop);
+                    
+                    if (coords) {
+                        coordinates.push([coords.lat, coords.lng]);
                         
-                        if (coords) {
-                            busCoordinates.push([coords.lat, coords.lng]);
-                            
-                            // Destacar o ponto mais próximo
-                            const isClosestStop = (i === result.stopIndex);
-                            const markerColor = isClosestStop ? '#4CAF50' : '#2196F3';
-                            const markerSize = isClosestStop ? 30 : 25;
-                            
-                            const busStopIcon = L.divIcon({
-                                html: `<div style="
-                                    background-color: ${markerColor};
-                                    width: ${markerSize}px;
-                                    height: ${markerSize}px;
-                                    border-radius: 50%;
-                                    border: 3px solid white;
-                                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    color: white;
-                                    font-weight: bold;
-                                    font-size: ${isClosestStop ? '14px' : '12px'};
-                                ">${isClosestStop ? '🚌' : i + 1}</div>`,
-                                className: 'bus-stop-marker',
-                                iconSize: [markerSize, markerSize],
-                                iconAnchor: [markerSize/2, markerSize/2]
-                            });
-                            
-                            const stopMarker = L.marker([coords.lat, coords.lng], { 
-                                icon: busStopIcon 
-                            }).addTo(map);
-                            
-                            const distanceFromUser = calculateDistance(
-                                searchData.userCoords.lat, searchData.userCoords.lng,
-                                coords.lat, coords.lng
-                            );
-                            
-                            const distanceText = distanceFromUser < 1 ? 
-                                `${Math.round(distanceFromUser * 1000)}m` : 
-                                `${distanceFromUser.toFixed(1)}km`;
-                            
-                            stopMarker.bindPopup(`
-                                <div style="min-width: 250px;">
-                                    <h4 style="margin: 0 0 10px 0; color: ${markerColor};">
-                                        ${isClosestStop ? '🎯 Ponto Mais Próximo' : `🚌 Parada ${i + 1}`}
-                                    </h4>
-                                    <p style="margin: 5px 0; font-weight: 600;">${stop}</p>
-                                    <small style="color: #666;">${coords.display_name || 'Parada do ônibus'}</small>
-                                    <br><br>
-                                    <div style="background: #f5f5f5; padding: 8px; border-radius: 5px; margin: 10px 0;">
-                                        <strong>📏 Distância: ${distanceText}</strong>
-                                    </div>
-                                    <a href="https://www.google.com/maps/dir/${encodeURIComponent(userAddress)}/${encodeURIComponent(stop)}" 
-                                       target="_blank" 
-                                       style="
-                                           background: #4CAF50;
-                                           color: white;
-                                           padding: 8px 15px;
-                                           text-decoration: none;
-                                           border-radius: 5px;
-                                           font-size: 12px;
-                                           display: inline-block;
-                                           margin-top: 5px;
-                                       ">
-                                       🧭 Como Chegar
-                                    </a>
+                        const isClosest = (i === result.match.index);
+                        const color = isClosest ? '#4CAF50' : '#2196F3';
+                        const size = isClosest ? 30 : 25;
+                        
+                        const stopIcon = L.divIcon({
+                            html: `<div style="
+                                background: ${color};
+                                width: ${size}px;
+                                height: ${size}px;
+                                border-radius: 50%;
+                                border: 3px solid white;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                color: white;
+                                font-weight: bold;
+                                font-size: ${isClosest ? '14px' : '12px'};
+                            ">${isClosest ? '🚌' : i + 1}</div>`,
+                            iconSize: [size, size],
+                            iconAnchor: [size/2, size/2]
+                        });
+                        
+                        const stopMarker = L.marker([coords.lat, coords.lng], { 
+                            icon: stopIcon 
+                        }).addTo(currentMap);
+                        
+                        const distance = GeoUtils.distance(
+                            result.userCoords.lat, result.userCoords.lng,
+                            coords.lat, coords.lng
+                        );
+                        
+                        const distanceText = distance < 1 ? 
+                            `${Math.round(distance * 1000)}m` : 
+                            `${distance.toFixed(1)}km`;
+                        
+                        stopMarker.bindPopup(`
+                            <div style="min-width: 200px;">
+                                <h4 style="margin: 0 0 10px 0; color: ${color};">
+                                    ${isClosest ? '🎯 Ponto Mais Próximo' : `🚌 Parada ${i + 1}`}
+                                </h4>
+                                <p style="margin: 5px 0; font-weight: 600;">${stop}</p>
+                                <div style="background: #f5f5f5; padding: 8px; border-radius: 5px; margin: 10px 0;">
+                                    <strong>📏 ${distanceText} de você</strong>
                                 </div>
-                            `);
-                            
-                            busMarkers.push(stopMarker);
-                            
-                            // Salvar coordenadas do ponto mais próximo
-                            if (isClosestStop) {
-                                result.stopCoords = coords;
-                            }
-                        }
-                    } catch (error) {
-                        console.log('Erro ao processar parada:', stop, error);
+                                <a href="https://www.google.com/maps/dir/${encodeURIComponent(searchResults.userCoords.name)}/${encodeURIComponent(stop)}" 
+                                   target="_blank" 
+                                   style="background: #4CAF50; color: white; padding: 8px 12px; text-decoration: none; border-radius: 5px; font-size: 12px;">
+                                   🧭 Como Chegar
+                                </a>
+                            </div>
+                        `);
+                        
+                        allMarkers.push(stopMarker);
                     }
                 }
                 
-                // Desenhar linha da rota do ônibus
-                if (busCoordinates.length >= 2) {
-                    const busPolyline = L.polyline(busCoordinates, {
+                // Linha da rota
+                if (coordinates.length >= 2) {
+                    L.polyline(coordinates, {
                         color: '#2196F3',
                         weight: 4,
                         opacity: 0.7,
                         dashArray: '8, 4'
-                    }).addTo(map);
+                    }).addTo(currentMap);
                 }
                 
-                // Linha direta do usuário até o ponto mais próximo
-                if (result.stopCoords) {
-                    const directLine = L.polyline([
-                        [searchData.userCoords.lat, searchData.userCoords.lng],
-                        [result.stopCoords.lat, result.stopCoords.lng]
+                // Linha direta para o ponto mais próximo
+                if (result.match.coords) {
+                    L.polyline([
+                        [result.userCoords.lat, result.userCoords.lng],
+                        [result.match.coords.lat, result.match.coords.lng]
                     ], {
                         color: '#4CAF50',
                         weight: 3,
                         opacity: 0.8,
                         dashArray: '5, 10'
-                    }).addTo(map);
+                    }).addTo(currentMap);
                 }
                 
-                // Ajustar zoom para mostrar usuário e pontos próximos
-                if (busMarkers.length > 1) {
-                    const group = new L.featureGroup(busMarkers);
-                    map.fitBounds(group.getBounds().pad(0.15));
+                // Ajustar zoom
+                if (allMarkers.length > 1) {
+                    const group = new L.featureGroup(allMarkers);
+                    currentMap.fitBounds(group.getBounds().pad(0.1));
                 }
                 
-                // Remover loading
-                const loadingToRemove = document.querySelector('#map .loading-overlay');
-                if (loadingToRemove) {
-                    loadingToRemove.remove();
-                }
-                
-                // Remover botão anterior se existir
-                const existingBtn = document.querySelector('#map .google-maps-btn');
-                if (existingBtn) {
-                    existingBtn.remove();
-                }
-                
-                // Botão Google Maps
-                const googleMapsBtn = document.createElement('div');
-                googleMapsBtn.className = 'google-maps-btn';
-                googleMapsBtn.style.cssText = `
-                    position: absolute;
-                    top: 80px;
-                    right: 10px;
-                    z-index: 1000;
-                `;
-                
-                googleMapsBtn.innerHTML = `
-                    <a href="https://www.google.com/maps/dir/${encodeURIComponent(userAddress)}/${encodeURIComponent(result.closestStop)}" 
-                       target="_blank" 
-                       style="
-                           background: #4285f4;
-                           color: white;
-                           padding: 10px 15px;
-                           text-decoration: none;
-                           border-radius: 5px;
-                           font-weight: bold;
-                           box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-                           display: inline-block;
-                       ">
-                        🧭 Navegação
-                    </a>
-                `;
-                document.getElementById('map').appendChild(googleMapsBtn);
+                MapSystem.hideLoading();
                 
             } catch (error) {
-                console.error('Erro ao mostrar mapa:', error);
-                const loadingToRemove = document.querySelector('#map .loading-overlay');
-                if (loadingToRemove) {
-                    loadingToRemove.remove();
-                }
-                alert('Erro ao carregar o mapa. Verifique sua conexão e tente novamente.');
+                MapSystem.hideLoading();
+                console.error('Erro no mapa:', error);
+                alert('Erro ao carregar mapa');
             }
         }
+
+        async function showRouteMap(routeIndex) {
             const route = busRoutes[routeIndex];
             const modal = document.getElementById('mapModal');
             const modalTitle = document.getElementById('modalTitle');
             
-            modalTitle.textContent = `🗺️ Trajeto da Linha ${route.number} - ${route.route}`;
+            modalTitle.textContent = `🗺️ Linha ${route.number} - ${route.route}`;
             modal.style.display = 'block';
             
-            // Inicializar mapa se ainda não existe
-            if (!map) {
-                map = L.map('map').setView([-25.4284, -49.2733], 12); // Curitiba como padrão
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors'
-                }).addTo(map);
-            }
-            
-            // Limpar marcadores anteriores
-            map.eachLayer(function (layer) {
-                if (layer instanceof L.Marker || layer instanceof L.Polyline) {
-                    map.removeLayer(layer);
-                }
-            });
-            
-            // Mostrar loading
-            const loadingDiv = document.createElement('div');
-            loadingDiv.style.cssText = `
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: white;
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-                z-index: 1000;
-                text-align: center;
-            `;
-            loadingDiv.innerHTML = '🔄 Carregando trajeto...';
-            document.getElementById('map').appendChild(loadingDiv);
+            MapSystem.init();
+            MapSystem.clear();
+            MapSystem.showLoading();
             
             try {
                 const coordinates = [];
                 const markers = [];
                 
-                // Geocodificar cada parada
                 for (let i = 0; i < route.stops.length; i++) {
                     const stop = route.stops[i];
-                    const coords = await geocodeAddress(stop);
+                    const coords = await GeoAPI.geocode(stop);
                     
                     if (coords) {
                         coordinates.push([coords.lat, coords.lng]);
                         
-                        // Criar marcador personalizado
-                        const markerColor = i === 0 ? '#4CAF50' : (i === route.stops.length - 1 ? '#f44336' : '#2196F3');
-                        const markerIcon = L.divIcon({
+                        const color = i === 0 ? '#4CAF50' : 
+                                     i === route.stops.length - 1 ? '#f44336' : '#2196F3';
+                        
+                        const icon = L.divIcon({
                             html: `<div style="
-                                background-color: ${markerColor};
+                                background: ${color};
                                 width: 25px;
                                 height: 25px;
                                 border-radius: 50%;
@@ -1364,109 +1011,216 @@
                                 font-weight: bold;
                                 font-size: 12px;
                             ">${i + 1}</div>`,
-                            className: 'custom-marker',
                             iconSize: [25, 25],
                             iconAnchor: [12, 12]
                         });
                         
-                        const marker = L.marker([coords.lat, coords.lng], { icon: markerIcon }).addTo(map);
+                        const marker = L.marker([coords.lat, coords.lng], { icon }).addTo(currentMap);
                         
-                        // Popup com informações da parada
-                        const popupContent = `
+                        marker.bindPopup(`
                             <div style="min-width: 200px;">
-                                <h4 style="margin: 0 0 10px 0; color: #333;">
-                                    ${i === 0 ? '🚀 Início' : (i === route.stops.length - 1 ? '🏁 Fim' : `📍 Parada ${i + 1}`)}
+                                <h4 style="margin: 0 0 10px 0; color: ${color};">
+                                    ${i === 0 ? '🚀 Início' : 
+                                      i === route.stops.length - 1 ? '🏁 Fim' : 
+                                      `📍 Parada ${i + 1}`}
                                 </h4>
                                 <p style="margin: 5px 0; font-weight: 600;">${stop}</p>
-                                <small style="color: #666;">${coords.display_name}</small>
-                                <br><br>
                                 <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop)}" 
                                    target="_blank" 
-                                   style="
-                                       background: #4CAF50;
-                                       color: white;
-                                       padding: 5px 10px;
-                                       text-decoration: none;
-                                       border-radius: 5px;
-                                       font-size: 12px;
-                                   ">
+                                   style="background: #4CAF50; color: white; padding: 5px 10px; text-decoration: none; border-radius: 5px; font-size: 12px;">
                                    📱 Abrir no Google Maps
                                 </a>
                             </div>
-                        `;
-                        marker.bindPopup(popupContent);
+                        `);
+                        
                         markers.push(marker);
                     }
                 }
                 
-                // Desenhar linha do trajeto se há pelo menos 2 pontos
                 if (coordinates.length >= 2) {
-                    const polyline = L.polyline(coordinates, {
+                    L.polyline(coordinates, {
                         color: '#2196F3',
                         weight: 4,
                         opacity: 0.8,
                         dashArray: '10, 5'
-                    }).addTo(map);
+                    }).addTo(currentMap);
                     
-                    // Ajustar zoom para mostrar toda a rota
                     const group = new L.featureGroup(markers);
-                    map.fitBounds(group.getBounds().pad(0.1));
-                } else if (coordinates.length === 1) {
-                    map.setView(coordinates[0], 15);
+                    currentMap.fitBounds(group.getBounds().pad(0.1));
                 }
                 
-                // Remover loading
-                document.getElementById('map').removeChild(loadingDiv);
-                
-                // Adicionar botão para abrir no Google Maps
-                const googleMapsBtn = document.createElement('div');
-                googleMapsBtn.style.cssText = `
-                    position: absolute;
-                    top: 80px;
-                    right: 10px;
-                    z-index: 1000;
-                `;
-                
-                const googleMapsUrl = `https://www.google.com/maps/dir/${route.stops.map(stop => encodeURIComponent(stop)).join('/')}`;
-                googleMapsBtn.innerHTML = `
-                    <a href="${googleMapsUrl}" target="_blank" style="
-                        background: #4285f4;
-                        color: white;
-                        padding: 10px 15px;
-                        text-decoration: none;
-                        border-radius: 5px;
-                        font-weight: bold;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-                        display: inline-block;
-                    ">
-                        🗺️ Abrir no Google Maps
-                    </a>
-                `;
-                document.getElementById('map').appendChild(googleMapsBtn);
+                MapSystem.hideLoading();
                 
             } catch (error) {
-                document.getElementById('map').removeChild(loadingDiv);
-                alert('Erro ao carregar o mapa. Verifique os endereços cadastrados.');
-                console.error('Erro:', error);
+                MapSystem.hideLoading();
+                console.error('Erro no mapa:', error);
+                alert('Erro ao carregar trajeto');
             }
         }
 
-        // Função para fechar o mapa
-        function closeMap() {
+        function addRoute() {
+            const number = document.getElementById('busNumber').value.trim();
+            const route = document.getElementById('busRoute').value.trim();
+            const stops = document.getElementById('busStops').value.trim();
+            
+            if (!number || !route || !stops) {
+                alert('Preencha todos os campos');
+                return;
+            }
+            
+            const stopsArray = stops.split('\n').map(s => s.trim()).filter(s => s);
+            
+            if (stopsArray.length < 2) {
+                alert('Adicione pelo menos 2 endereços');
+                return;
+            }
+            
+            const exists = busRoutes.find(r => r.number === number);
+            if (exists && !confirm(`Rota ${number} já existe. Substituir?`)) {
+                return;
+            }
+            
+            if (exists) {
+                const index = busRoutes.findIndex(r => r.number === number);
+                busRoutes.splice(index, 1);
+            }
+            
+            busRoutes.push({
+                number: number,
+                route: route,
+                stops: stopsArray
+            });
+            
+            Storage.save(busRoutes);
+            
+            document.getElementById('busNumber').value = '';
+            document.getElementById('busRoute').value = '';
+            document.getElementById('busStops').value = '';
+            
+            showMessage('Rota adicionada com sucesso! 💾');
+            updateRoutesList();
+        }
+
+        function importFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n');
+                let count = 0;
+                
+                lines.forEach((line, index) => {
+                    if (line.trim() && index > 0) {
+                        const parts = line.split(',');
+                        if (parts.length >= 3) {
+                            const number = parts[0].trim();
+                            const route = parts[1].trim();
+                            const stops = parts.slice(2).map(s => s.trim()).filter(s => s);
+                            
+                            if (number && route && stops.length > 0) {
+                                busRoutes.push({ number, route, stops });
+                                count++;
+                            }
+                        }
+                    }
+                });
+                
+                Storage.save(busRoutes);
+                updateRoutesList();
+                showMessage(`${count} rotas importadas! 📁`);
+            };
+            
+            reader.readAsText(file);
+        }
+
+        function deleteRoute(index) {
+            const route = busRoutes[index];
+            if (confirm(`Excluir rota ${route.number}?`)) {
+                busRoutes.splice(index, 1);
+                Storage.save(busRoutes);
+                updateRoutesList();
+                showMessage('Rota excluída! 🗑️');
+            }
+        }
+
+        function exportBackup() {
+            const data = JSON.stringify(busRoutes, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_rotas_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showMessage('Backup exportado! 📤');
+        }
+
+        function clearAll() {
+            if (confirm('Apagar TODAS as rotas?') && confirm('Confirma exclusão?')) {
+                busRoutes = [];
+                Storage.save(busRoutes);
+                updateRoutesList();
+                showMessage('Dados limpos! 🗑️');
+            }
+        }
+
+        function updateRoutesList() {
+            const list = document.getElementById('routesList');
+            
+            if (busRoutes.length === 0) {
+                list.innerHTML = '<p style="color: #666;">Nenhuma rota cadastrada</p>';
+                return;
+            }
+            
+            list.innerHTML = busRoutes.map((bus, index) => `
+                <div class="route-item">
+                    <div class="route-number">🚌 Linha ${bus.number}</div>
+                    <div style="font-weight: 600; margin: 5px 0;">${bus.route}</div>
+                    <div class="stops-preview">
+                        📍 ${bus.stops.length} paradas: ${bus.stops.slice(0, 2).join(' → ')}${bus.stops.length > 2 ? ' → ...' : ''}
+                    </div>
+                    <div class="route-actions">
+                        <button class="btn-map" onclick="showRouteMap(${index})">
+                            🗺️ Ver Trajeto
+                        </button>
+                        <button class="btn-delete" onclick="deleteRoute(${index})">
+                            🗑️ Excluir
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showMessage(text) {
+            const msg = document.getElementById('successMessage');
+            msg.textContent = text;
+            msg.style.display = 'block';
+            setTimeout(() => {
+                msg.style.display = 'none';
+            }, 3000);
+        }
+
+        function closeModal() {
             document.getElementById('mapModal').style.display = 'none';
         }
 
-        // Fechar modal clicando fora dele
+        // Fechar modal ao clicar fora
         window.onclick = function(event) {
             const modal = document.getElementById('mapModal');
             if (event.target === modal) {
                 modal.style.display = 'none';
             }
-        }
+        };
 
-        // Inicializar a lista de rotas ao carregar a página
+        // Inicialização
         document.addEventListener('DOMContentLoaded', function() {
+            busRoutes = Storage.load();
             updateRoutesList();
+            console.log('🚌 Sistema iniciado com', busRoutes.length, 'rotas');
         });
     </script>
 </body>
