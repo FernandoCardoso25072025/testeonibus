@@ -587,6 +587,31 @@
             return R * c;
         }
 
+        // Função para calcular distância de Levenshtein
+        function levenshteinDistance(str1, str2) {
+            const matrix = [];
+            for (let i = 0; i <= str2.length; i++) {
+                matrix[i] = [i];
+            }
+            for (let j = 0; j <= str1.length; j++) {
+                matrix[0][j] = j;
+            }
+            for (let i = 1; i <= str2.length; i++) {
+                for (let j = 1; j <= str1.length; j++) {
+                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            matrix[i][j - 1] + 1,
+                            matrix[i - 1][j] + 1
+                        );
+                    }
+                }
+            }
+            return matrix[str2.length][str1.length];
+        }
+
         // Função para calcular similaridade entre endereços (melhorada)
         function calculateSimilarity(address1, address2) {
             const normalize = (str) => str.toLowerCase()
@@ -614,38 +639,13 @@
                         matches++;
                     } else if (word1.includes(word2) || word2.includes(word1)) {
                         matches += 0.7;
-                    } else if (this.levenshteinDistance(word1, word2) <= 2 && word1.length > 3) {
+                    } else if (levenshteinDistance(word1, word2) <= 2 && word1.length > 3) {
                         matches += 0.5;
                     }
                 });
             });
             
             return Math.min(matches / totalWords, 1);
-        }
-
-        // Função para calcular distância de Levenshtein
-        function levenshteinDistance(str1, str2) {
-            const matrix = [];
-            for (let i = 0; i <= str2.length; i++) {
-                matrix[i] = [i];
-            }
-            for (let j = 0; j <= str1.length; j++) {
-                matrix[0][j] = j;
-            }
-            for (let i = 1; i <= str2.length; i++) {
-                for (let j = 1; j <= str1.length; j++) {
-                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-                        matrix[i][j] = matrix[i - 1][j - 1];
-                    } else {
-                        matrix[i][j] = Math.min(
-                            matrix[i - 1][j - 1] + 1,
-                            matrix[i][j - 1] + 1,
-                            matrix[i - 1][j] + 1
-                        );
-                    }
-                }
-            }
-            return matrix[str2.length][str1.length];
         }
 
         // Função para encontrar ônibus
@@ -758,6 +758,42 @@
                             <div style="font-size: 0.9em; opacity: 0.9;">
                                 <strong>Ponto mais próximo:</strong><br>
                                 📍 ${result.closestStop}
+                            </div>
+                        </div>
+                        
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button onclick="showUserLocationMap('${userAddress.replace(/'/g, "\\'")}', ${index})" 
+                                    style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; cursor: pointer; flex: 1;">
+                                🗺️ Ver no Mapa
+                            </button>
+                            <a href="https://www.google.com/maps/dir/${encodeURIComponent(userAddress)}/${encodeURIComponent(result.closestStop)}" 
+                               target="_blank" 
+                               style="background: #2196F3; color: white; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; text-decoration: none; text-align: center; flex: 1;">
+                                🧭 Como Chegar
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            busResults.innerHTML = `
+                <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
+                    <h4 style="margin: 0 0 10px 0; color: #2e7d32;">📍 Endereço Pesquisado:</h4>
+                    <p style="margin: 0; font-weight: 600;">${userAddress}</p>
+                    <small style="color: #666;">Encontramos ${results.length} linha(s) de ônibus próxima(s)</small>
+                </div>
+                ${resultsHTML}
+            `;
+            
+            resultDiv.style.display = 'block';
+            
+            // Armazenar dados para o mapa
+            window.currentSearchResults = {
+                userAddress: userAddress,
+                userCoords: userCoords,
+                results: results
+            };
+        }Stop}
                             </div>
                         </div>
                         
@@ -1001,52 +1037,66 @@
 
         // Função para mostrar localização do usuário no mapa
         async function showUserLocationMap(userAddress, resultIndex) {
-            const searchData = window.currentSearchResults;
-            if (!searchData) return;
-            
-            const result = searchData.results[resultIndex];
-            const modal = document.getElementById('mapModal');
-            const modalTitle = document.getElementById('modalTitle');
-            
-            modalTitle.innerHTML = `🗺️ ${userAddress} → Linha ${result.bus.number}`;
-            modal.style.display = 'block';
-            
-            // Inicializar mapa se ainda não existe
-            if (!map) {
-                map = L.map('map').setView([searchData.userCoords.lat, searchData.userCoords.lng], 14);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors'
-                }).addTo(map);
-            }
-            
-            // Limpar marcadores anteriores
-            map.eachLayer(function (layer) {
-                if (layer instanceof L.Marker || layer instanceof L.Polyline) {
-                    map.removeLayer(layer);
-                }
-            });
-            
-            // Centralizar no usuário
-            map.setView([searchData.userCoords.lat, searchData.userCoords.lng], 14);
-            
-            // Mostrar loading
-            const loadingDiv = document.createElement('div');
-            loadingDiv.style.cssText = `
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: white;
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-                z-index: 1000;
-                text-align: center;
-            `;
-            loadingDiv.innerHTML = '🔄 Carregando mapa personalizado...';
-            document.getElementById('map').appendChild(loadingDiv);
-            
             try {
+                const searchData = window.currentSearchResults;
+                if (!searchData) {
+                    alert('Dados da pesquisa não encontrados. Faça uma nova busca.');
+                    return;
+                }
+                
+                const result = searchData.results[resultIndex];
+                if (!result) {
+                    alert('Resultado não encontrado. Tente novamente.');
+                    return;
+                }
+                
+                const modal = document.getElementById('mapModal');
+                const modalTitle = document.getElementById('modalTitle');
+                
+                modalTitle.innerHTML = `🗺️ ${userAddress} → Linha ${result.bus.number}`;
+                modal.style.display = 'block';
+                
+                // Inicializar mapa se ainda não existe
+                if (!map) {
+                    map = L.map('map').setView([searchData.userCoords.lat, searchData.userCoords.lng], 14);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(map);
+                }
+                
+                // Limpar marcadores anteriores
+                map.eachLayer(function (layer) {
+                    if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+                        map.removeLayer(layer);
+                    }
+                });
+                
+                // Centralizar no usuário
+                map.setView([searchData.userCoords.lat, searchData.userCoords.lng], 14);
+                
+                // Mostrar loading
+                const existingLoading = document.querySelector('#map .loading-overlay');
+                if (existingLoading) {
+                    existingLoading.remove();
+                }
+                
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'loading-overlay';
+                loadingDiv.style.cssText = `
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                    z-index: 1000;
+                    text-align: center;
+                `;
+                loadingDiv.innerHTML = '🔄 Carregando mapa personalizado...';
+                document.getElementById('map').appendChild(loadingDiv);
+                
                 // Marcador do usuário (vermelho, maior)
                 const userIcon = L.divIcon({
                     html: `<div style="
@@ -1074,88 +1124,97 @@
                     <div style="min-width: 250px;">
                         <h4 style="margin: 0 0 10px 0; color: #f44336;">📍 Sua Localização</h4>
                         <p style="margin: 5px 0; font-weight: 600;">${userAddress}</p>
-                        <small style="color: #666;">${searchData.userCoords.display_name}</small>
+                        <small style="color: #666;">${searchData.userCoords.display_name || 'Localização encontrada'}</small>
                     </div>
                 `);
                 
                 // Desenhar toda a rota do ônibus
                 const busCoordinates = [];
-                const busMarkers = [];
+                const busMarkers = [userMarker];
                 
                 for (let i = 0; i < result.bus.stops.length; i++) {
                     const stop = result.bus.stops[i];
-                    const coords = await geocodeAddress(stop);
-                    
-                    if (coords) {
-                        busCoordinates.push([coords.lat, coords.lng]);
+                    try {
+                        const coords = await geocodeAddress(stop);
                         
-                        // Destacar o ponto mais próximo
-                        const isClosestStop = (i === result.stopIndex);
-                        const markerColor = isClosestStop ? '#4CAF50' : '#2196F3';
-                        const markerSize = isClosestStop ? 30 : 25;
-                        
-                        const busStopIcon = L.divIcon({
-                            html: `<div style="
-                                background-color: ${markerColor};
-                                width: ${markerSize}px;
-                                height: ${markerSize}px;
-                                border-radius: 50%;
-                                border: 3px solid white;
-                                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                color: white;
-                                font-weight: bold;
-                                font-size: ${isClosestStop ? '14px' : '12px'};
-                            ">${isClosestStop ? '🚌' : i + 1}</div>`,
-                            className: 'bus-stop-marker',
-                            iconSize: [markerSize, markerSize],
-                            iconAnchor: [markerSize/2, markerSize/2]
-                        });
-                        
-                        const stopMarker = L.marker([coords.lat, coords.lng], { 
-                            icon: busStopIcon 
-                        }).addTo(map);
-                        
-                        const distanceFromUser = calculateDistance(
-                            searchData.userCoords.lat, searchData.userCoords.lng,
-                            coords.lat, coords.lng
-                        );
-                        
-                        const distanceText = distanceFromUser < 1 ? 
-                            `${Math.round(distanceFromUser * 1000)}m` : 
-                            `${distanceFromUser.toFixed(1)}km`;
-                        
-                        stopMarker.bindPopup(`
-                            <div style="min-width: 250px;">
-                                <h4 style="margin: 0 0 10px 0; color: ${markerColor};">
-                                    ${isClosestStop ? '🎯 Ponto Mais Próximo' : `🚌 Parada ${i + 1}`}
-                                </h4>
-                                <p style="margin: 5px 0; font-weight: 600;">${stop}</p>
-                                <small style="color: #666;">${coords.display_name}</small>
-                                <br><br>
-                                <div style="background: #f5f5f5; padding: 8px; border-radius: 5px; margin: 10px 0;">
-                                    <strong>📏 Distância: ${distanceText}</strong>
+                        if (coords) {
+                            busCoordinates.push([coords.lat, coords.lng]);
+                            
+                            // Destacar o ponto mais próximo
+                            const isClosestStop = (i === result.stopIndex);
+                            const markerColor = isClosestStop ? '#4CAF50' : '#2196F3';
+                            const markerSize = isClosestStop ? 30 : 25;
+                            
+                            const busStopIcon = L.divIcon({
+                                html: `<div style="
+                                    background-color: ${markerColor};
+                                    width: ${markerSize}px;
+                                    height: ${markerSize}px;
+                                    border-radius: 50%;
+                                    border: 3px solid white;
+                                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    color: white;
+                                    font-weight: bold;
+                                    font-size: ${isClosestStop ? '14px' : '12px'};
+                                ">${isClosestStop ? '🚌' : i + 1}</div>`,
+                                className: 'bus-stop-marker',
+                                iconSize: [markerSize, markerSize],
+                                iconAnchor: [markerSize/2, markerSize/2]
+                            });
+                            
+                            const stopMarker = L.marker([coords.lat, coords.lng], { 
+                                icon: busStopIcon 
+                            }).addTo(map);
+                            
+                            const distanceFromUser = calculateDistance(
+                                searchData.userCoords.lat, searchData.userCoords.lng,
+                                coords.lat, coords.lng
+                            );
+                            
+                            const distanceText = distanceFromUser < 1 ? 
+                                `${Math.round(distanceFromUser * 1000)}m` : 
+                                `${distanceFromUser.toFixed(1)}km`;
+                            
+                            stopMarker.bindPopup(`
+                                <div style="min-width: 250px;">
+                                    <h4 style="margin: 0 0 10px 0; color: ${markerColor};">
+                                        ${isClosestStop ? '🎯 Ponto Mais Próximo' : `🚌 Parada ${i + 1}`}
+                                    </h4>
+                                    <p style="margin: 5px 0; font-weight: 600;">${stop}</p>
+                                    <small style="color: #666;">${coords.display_name || 'Parada do ônibus'}</small>
+                                    <br><br>
+                                    <div style="background: #f5f5f5; padding: 8px; border-radius: 5px; margin: 10px 0;">
+                                        <strong>📏 Distância: ${distanceText}</strong>
+                                    </div>
+                                    <a href="https://www.google.com/maps/dir/${encodeURIComponent(userAddress)}/${encodeURIComponent(stop)}" 
+                                       target="_blank" 
+                                       style="
+                                           background: #4CAF50;
+                                           color: white;
+                                           padding: 8px 15px;
+                                           text-decoration: none;
+                                           border-radius: 5px;
+                                           font-size: 12px;
+                                           display: inline-block;
+                                           margin-top: 5px;
+                                       ">
+                                       🧭 Como Chegar
+                                    </a>
                                 </div>
-                                <a href="https://www.google.com/maps/dir/${encodeURIComponent(userAddress)}/${encodeURIComponent(stop)}" 
-                                   target="_blank" 
-                                   style="
-                                       background: #4CAF50;
-                                       color: white;
-                                       padding: 8px 15px;
-                                       text-decoration: none;
-                                       border-radius: 5px;
-                                       font-size: 12px;
-                                       display: inline-block;
-                                       margin-top: 5px;
-                                   ">
-                                   🧭 Como Chegar
-                                </a>
-                            </div>
-                        `);
-                        
-                        busMarkers.push(stopMarker);
+                            `);
+                            
+                            busMarkers.push(stopMarker);
+                            
+                            // Salvar coordenadas do ponto mais próximo
+                            if (isClosestStop) {
+                                result.stopCoords = coords;
+                            }
+                        }
+                    } catch (error) {
+                        console.log('Erro ao processar parada:', stop, error);
                     }
                 }
                 
@@ -1183,15 +1242,26 @@
                 }
                 
                 // Ajustar zoom para mostrar usuário e pontos próximos
-                const allMarkers = [userMarker, ...busMarkers];
-                const group = new L.featureGroup(allMarkers);
-                map.fitBounds(group.getBounds().pad(0.15));
+                if (busMarkers.length > 1) {
+                    const group = new L.featureGroup(busMarkers);
+                    map.fitBounds(group.getBounds().pad(0.15));
+                }
                 
                 // Remover loading
-                document.getElementById('map').removeChild(loadingDiv);
+                const loadingToRemove = document.querySelector('#map .loading-overlay');
+                if (loadingToRemove) {
+                    loadingToRemove.remove();
+                }
+                
+                // Remover botão anterior se existir
+                const existingBtn = document.querySelector('#map .google-maps-btn');
+                if (existingBtn) {
+                    existingBtn.remove();
+                }
                 
                 // Botão Google Maps
                 const googleMapsBtn = document.createElement('div');
+                googleMapsBtn.className = 'google-maps-btn';
                 googleMapsBtn.style.cssText = `
                     position: absolute;
                     top: 80px;
@@ -1218,9 +1288,12 @@
                 document.getElementById('map').appendChild(googleMapsBtn);
                 
             } catch (error) {
-                document.getElementById('map').removeChild(loadingDiv);
-                alert('Erro ao carregar o mapa. Tente novamente.');
-                console.error('Erro:', error);
+                console.error('Erro ao mostrar mapa:', error);
+                const loadingToRemove = document.querySelector('#map .loading-overlay');
+                if (loadingToRemove) {
+                    loadingToRemove.remove();
+                }
+                alert('Erro ao carregar o mapa. Verifique sua conexão e tente novamente.');
             }
         }
             const route = busRoutes[routeIndex];
