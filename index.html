@@ -209,6 +209,7 @@
             display: inline-flex;
             align-items: center;
             gap: 5px;
+            justify-content: center;
         }
         
         .btn-map:hover {
@@ -793,14 +794,14 @@
                         </div>
                         
                         <div style="display: flex; gap: 10px; margin-top: 15px;">
-                            <button onclick="showUserMap(${index})" 
-                                    style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; cursor: pointer; flex: 1;">
-                                🗺️ Ver no Mapa
-                            </button>
+                            <a href="#" onclick="openGoogleMapsRoute(${index})" 
+                               style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; cursor: pointer; flex: 1; text-decoration: none; text-align: center;">
+                                🗺️ Ver Trajeto Completo
+                            </a>
                             <a href="https://www.google.com/maps/dir/${encodeURIComponent(userAddress)}/${encodeURIComponent(result.match.stop)}" 
                                target="_blank" 
                                style="background: #2196F3; color: white; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; text-decoration: none; text-align: center; flex: 1;">
-                                🧭 Navegação
+                                🧭 Ir ao Ponto
                             </a>
                         </div>
                     </div>
@@ -817,7 +818,39 @@
             `;
         }
 
-        async function showUserMap(resultIndex) {
+        // Função para abrir trajeto completo do ônibus recomendado no Google Maps
+        function openGoogleMapsRoute(resultIndex) {
+            if (!searchResults || !searchResults.results[resultIndex]) {
+                alert('Dados não encontrados. Faça uma nova busca.');
+                return;
+            }
+            
+            const result = searchResults.results[resultIndex];
+            const bus = result.bus;
+            const userAddress = document.getElementById('userAddress').value.trim();
+            
+            // Criar URL com todas as paradas da rota do ônibus
+            const waypoints = [userAddress, ...bus.stops];
+            const googleMapsUrl = `https://www.google.com/maps/dir/${waypoints.map(stop => encodeURIComponent(stop)).join('/')}`;
+            
+            // Abrir no Google Maps
+            window.open(googleMapsUrl, '_blank');
+        }
+
+        // Função para abrir trajeto completo da rota cadastrada no Google Maps
+        function openGoogleMapsFullRoute(routeIndex) {
+            const route = busRoutes[routeIndex];
+            if (!route) {
+                alert('Rota não encontrada.');
+                return;
+            }
+            
+            // Criar URL com todas as paradas da rota
+            const googleMapsUrl = `https://www.google.com/maps/dir/${route.stops.map(stop => encodeURIComponent(stop)).join('/')}`;
+            
+            // Abrir no Google Maps
+            window.open(googleMapsUrl, '_blank');
+        }
             if (!searchResults || !searchResults.results[resultIndex]) {
                 alert('Dados não encontrados. Faça uma nova busca.');
                 return;
@@ -1184,9 +1217,9 @@
                         📍 ${bus.stops.length} paradas: ${bus.stops.slice(0, 2).join(' → ')}${bus.stops.length > 2 ? ' → ...' : ''}
                     </div>
                     <div class="route-actions">
-                        <button class="btn-map" onclick="showRouteMap(${index})">
-                            🗺️ Ver Trajeto
-                        </button>
+                        <a href="#" onclick="openGoogleMapsFullRoute(${index})" class="btn-map">
+                            🗺️ Ver Trajeto Completo
+                        </a>
                         <button class="btn-delete" onclick="deleteRoute(${index})">
                             🗑️ Excluir
                         </button>
