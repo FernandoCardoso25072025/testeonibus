@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Encontre seu Ônibus</title>
+    <title>Encontre seu Ônibus - Sistema Avançado</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <style>
         * {
             margin: 0;
@@ -11,684 +12,1750 @@
             box-sizing: border-box;
         }
         
+        :root {
+            --primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary: linear-gradient(45deg, #4CAF50, #45a049);
+            --accent: linear-gradient(45deg, #FF6B6B, #FF8E53);
+            --success: #4CAF50;
+            --warning: #FF9800;
+            --error: #f44336;
+            --info: #2196F3;
+            --dark: #2c3e50;
+            --light: #ecf0f1;
+            --shadow: 0 10px 30px rgba(0,0,0,0.1);
+            --border-radius: 15px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--primary);
             min-height: 100vh;
-            padding: 20px;
+            line-height: 1.6;
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
+            padding: 20px;
         }
         
         .header {
-            background: linear-gradient(45deg, #4CAF50, #45a049);
-            color: white;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: var(--border-radius);
             padding: 30px;
             text-align: center;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
         .header h1 {
-            font-size: 2.5em;
+            font-size: clamp(2rem, 5vw, 3rem);
+            background: var(--primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            font-weight: 800;
         }
         
         .header p {
-            font-size: 1.2em;
-            opacity: 0.9;
+            color: #666;
+            font-size: 1.1rem;
+            opacity: 0.8;
         }
         
-        .main-content {
+        .main-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .search-panel, .admin-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: var(--border-radius);
             padding: 30px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: var(--transition);
         }
         
-        .search-section, .admin-section {
-            background: #f8f9fa;
-            padding: 25px;
-            border-radius: 15px;
-            border: 2px solid #e9ecef;
+        .search-panel:hover, .admin-panel:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
         }
         
-        .section-title {
-            font-size: 1.5em;
-            color: #333;
-            margin-bottom: 20px;
+        .panel-title {
+            font-size: 1.5rem;
+            color: var(--dark);
+            margin-bottom: 25px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+            font-weight: 700;
         }
         
-        .icon {
-            width: 24px;
-            height: 24px;
-            background: #4CAF50;
-            border-radius: 50%;
-            display: inline-block;
+        .panel-title::before {
+            content: '';
+            width: 4px;
+            height: 30px;
+            background: var(--secondary);
+            border-radius: 2px;
         }
         
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
+            position: relative;
         }
         
-        label {
+        .form-label {
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
-            color: #555;
+            color: var(--dark);
+            font-size: 0.95rem;
         }
         
-        input, select, textarea {
+        .form-input, .form-textarea, .form-select {
             width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #ddd;
-            border-radius: 10px;
+            padding: 16px 20px;
+            border: 2px solid #e1e8ed;
+            border-radius: 12px;
             font-size: 16px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
+            background: rgba(255, 255, 255, 0.8);
+            font-family: inherit;
         }
         
-        input:focus, select:focus, textarea:focus {
+        .form-input:focus, .form-textarea:focus, .form-select:focus {
             outline: none;
             border-color: #4CAF50;
-            box-shadow: 0 0 0 3px rgba(76,175,80,0.1);
-        }
-        
-        button {
-            background: linear-gradient(45deg, #4CAF50, #45a049);
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            width: 100%;
-            margin-top: 10px;
-        }
-        
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(76,175,80,0.4);
-        }
-        
-        .result {
-            margin-top: 20px;
-            padding: 20px;
+            box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.1);
             background: white;
-            border-radius: 10px;
-            border-left: 5px solid #4CAF50;
+            transform: translateY(-2px);
+        }
+        
+        .autocomplete-container {
+            position: relative;
+        }
+        
+        .autocomplete-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: var(--shadow);
             display: none;
         }
         
-        .bus-card {
-            background: linear-gradient(45deg, #2196F3, #21CBF3);
+        .autocomplete-suggestion {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #f5f5f5;
+            transition: background-color 0.2s;
+        }
+        
+        .autocomplete-suggestion:hover,
+        .autocomplete-suggestion.active {
+            background: #f8f9fa;
+        }
+        
+        .btn {
+            background: var(--secondary);
             color: white;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 16px 32px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(76, 175, 80, 0.3);
+        }
+        
+        .btn:hover::before {
+            left: 100%;
+        }
+        
+        .btn:active {
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: var(--accent);
+            font-size: 14px;
+            padding: 12px 24px;
+            width: auto;
+        }
+        
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 12px;
+            border-radius: 8px;
+        }
+        
+        .filters-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: rgba(76, 175, 80, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(76, 175, 80, 0.1);
+        }
+        
+        .quick-filters {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        
+        .filter-chip {
+            padding: 8px 16px;
+            background: #f8f9fa;
+            border: 1px solid #e1e8ed;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .filter-chip:hover,
+        .filter-chip.active {
+            background: var(--success);
+            color: white;
+            border-color: var(--success);
+            transform: translateY(-2px);
+        }
+        
+        .results-container {
+            grid-column: 1 / -1;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: none;
+        }
+        
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .results-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--dark);
+        }
+        
+        .results-count {
+            background: var(--success);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .bus-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            margin: 15px 0;
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .bus-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #FFD700, #FFA500, #FF6B6B);
+        }
+        
+        .bus-card:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(102, 126, 234, 0.3);
+        }
+        
+        .bus-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
         }
         
         .bus-number {
-            font-size: 1.5em;
-            font-weight: bold;
+            font-size: 2rem;
+            font-weight: 800;
             margin-bottom: 5px;
         }
         
         .bus-route {
             opacity: 0.9;
-            font-size: 0.9em;
+            font-size: 1.1rem;
+            font-weight: 500;
         }
         
-        .distance {
-            background: rgba(255,255,255,0.2);
-            padding: 5px 10px;
-            border-radius: 20px;
-            display: inline-block;
-            margin-top: 10px;
-            font-size: 0.8em;
+        .bus-status {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
         }
         
-        .routes-list {
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+        }
+        
+        .status-exact {
+            background: rgba(76, 175, 80, 0.9);
+        }
+        
+        .status-close {
+            background: rgba(255, 152, 0, 0.9);
+        }
+        
+        .status-far {
+            background: rgba(33, 150, 243, 0.9);
+        }
+        
+        .distance-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .bus-details {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
             border-radius: 10px;
-            padding: 10px;
-            margin-top: 15px;
+            margin: 15px 0;
+        }
+        
+        .bus-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-action {
+            flex: 1;
+            min-width: 140px;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            text-align: center;
+            transition: var(--transition);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .btn-map {
+            background: rgba(76, 175, 80, 0.9);
+            color: white;
+        }
+        
+        .btn-route {
+            background: rgba(33, 150, 243, 0.9);
+            color: white;
+        }
+        
+        .btn-favorite {
+            background: rgba(255, 193, 7, 0.9);
+            color: white;
+        }
+        
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .map-container {
+            grid-column: 1 / -1;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: none;
+        }
+        
+        #map {
+            width: 100%;
+            height: 500px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+        
+        .routes-management {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: var(--border-radius);
+            padding: 25px;
+            margin-top: 25px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
         .route-item {
             background: white;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 10px;
-            border-left: 4px solid #4CAF50;
-            font-size: 0.9em;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 12px;
+            border-left: 4px solid var(--success);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            transition: var(--transition);
         }
         
         .route-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            transform: translateX(5px);
+            box-shadow: var(--shadow);
+        }
+        
+        .route-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 15px;
         }
         
         .route-number {
-            font-weight: bold;
-            color: #4CAF50;
-            font-size: 1.1em;
+            font-weight: 700;
+            color: var(--success);
+            font-size: 1.2rem;
         }
         
         .route-actions {
-            margin-top: 10px;
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
         
-        .btn-map {
-            background: linear-gradient(45deg, #FF5722, #FF7043);
-            color: white;
-            padding: 8px 15px;
-            border: none;
-            border-radius: 20px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            justify-content: center;
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
         }
         
-        .btn-map:hover {
-            transform: scale(1.05);
-            box-shadow: 0 3px 10px rgba(255,87,34,0.4);
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: var(--transition);
         }
         
-        .btn-delete {
-            background: linear-gradient(45deg, #f44336, #e57373);
-            color: white;
-            padding: 8px 15px;
-            border: none;
-            border-radius: 20px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
+        .stat-card:hover {
+            transform: translateY(-5px);
         }
         
-        .btn-delete:hover {
-            transform: scale(1.05);
-            box-shadow: 0 3px 10px rgba(244,67,54,0.4);
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--success);
+            margin-bottom: 5px;
         }
         
-        .stops-preview {
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 5px;
-            margin-top: 8px;
-            font-size: 0.8em;
+        .stat-label {
             color: #666;
+            font-weight: 500;
+        }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            color: #666;
+            font-size: 1.1rem;
+        }
+        
+        .loading::before {
+            content: '';
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--success);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: var(--success);
+            color: white;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            z-index: 10000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            font-weight: 600;
+        }
+        
+        .toast.show {
+            transform: translateX(0);
+        }
+        
+        .toast.error {
+            background: var(--error);
         }
         
         .upload-area {
             border: 2px dashed #4CAF50;
-            border-radius: 10px;
-            padding: 20px;
+            border-radius: 12px;
+            padding: 30px;
             text-align: center;
-            background: #f0f8f0;
-            margin-top: 10px;
+            background: rgba(76, 175, 80, 0.05);
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: var(--transition);
+            margin-top: 20px;
         }
         
         .upload-area:hover {
-            background: #e8f5e8;
+            background: rgba(76, 175, 80, 0.1);
+            border-color: #45a049;
+            transform: translateY(-2px);
         }
         
-        .success-message {
-            background: #d4edda;
-            color: #155724;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 10px;
-            display: none;
+        .upload-area.dragover {
+            background: rgba(76, 175, 80, 0.15);
+            border-color: #45a049;
         }
         
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: #666;
-        }
-        
-        .status-badge {
-            padding: 4px 8px;
-            border-radius: 15px;
-            font-size: 0.8em;
-            margin-bottom: 5px;
-            display: inline-block;
-        }
-        
-        .status-exact { background: #4CAF50; color: white; }
-        .status-close { background: #FF9800; color: white; }
-        .status-far { background: #2196F3; color: white; }
-        
+        /* Responsive Design */
         @media (max-width: 768px) {
-            .main-content {
+            .main-grid {
                 grid-template-columns: 1fr;
                 gap: 20px;
+            }
+            
+            .container {
+                padding: 15px;
+            }
+            
+            .header {
                 padding: 20px;
             }
             
-            .header h1 {
-                font-size: 2em;
+            .search-panel, .admin-panel {
+                padding: 20px;
             }
+            
+            .filters-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .bus-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .bus-actions {
+                flex-direction: column;
+            }
+            
+            .btn-action {
+                min-width: auto;
+            }
+            
+            .route-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .results-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .quick-filters {
+                justify-content: center;
+            }
+            
+            .filter-chip {
+                font-size: 12px;
+                padding: 6px 12px;
+            }
+            
+            .bus-number {
+                font-size: 1.5rem;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+        
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --dark: #ecf0f1;
+                --light: #2c3e50;
+            }
+        }
+        
+        /* Accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            *, ::before, ::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+        
+        /* Focus indicators */
+        .btn:focus-visible,
+        .form-input:focus-visible,
+        .form-textarea:focus-visible,
+        .form-select:focus-visible {
+            outline: 2px solid var(--success);
+            outline-offset: 2px;
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Header -->
         <div class="header">
             <h1>🚌 Encontre seu Ônibus</h1>
-            <p>Digite seu endereço e descubra qual linha te leva ao destino</p>
+            <p>Sistema inteligente para encontrar a melhor rota de transporte público</p>
         </div>
-        
-        <div class="main-content">
-            <!-- Seção de Busca -->
-            <div class="search-section">
-                <h2 class="section-title">
-                    <span class="icon"></span>
-                    Buscar Rota
-                </h2>
-                
-                <div class="form-group">
-                    <label for="userAddress">Seu endereço atual:</label>
-                    <input type="text" id="userAddress" placeholder="Ex: Rua das Flores, 123">
-                </div>
-                
-                <div class="form-group">
-                    <label for="destination">Destino (opcional):</label>
-                    <input type="text" id="destination" placeholder="Ex: Centro da cidade">
-                </div>
-                
-                <button onclick="buscarOnibus()">🔍 Encontrar Ônibus</button>
-                
-                <div id="searchResult" class="result">
-                    <h3>Ônibus Recomendados:</h3>
-                    <div id="busResults"></div>
-                </div>
+
+        <!-- Statistics -->
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-number" id="totalRoutes">0</div>
+                <div class="stat-label">Rotas Cadastradas</div>
             </div>
-            
-            <!-- Seção Administrativa -->
-            <div class="admin-section">
-                <h2 class="section-title">
-                    <span class="icon"></span>
-                    Gerenciar Rotas
-                </h2>
+            <div class="stat-card">
+                <div class="stat-number" id="totalStops">0</div>
+                <div class="stat-label">Paradas Totais</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="lastSearch">0</div>
+                <div class="stat-label">Última Busca</div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Search Panel -->
+            <div class="search-panel">
+                <h2 class="panel-title">🔍 Buscar Rota</h2>
+                
+                <!-- Quick Filters -->
+                <div class="quick-filters">
+                    <div class="filter-chip" data-filter="all">Todas</div>
+                    <div class="filter-chip" data-filter="curitiba">Curitiba</div>
+                    <div class="filter-chip" data-filter="campo-largo">Campo Largo</div>
+                    <div class="filter-chip" data-filter="pinhais">Pinhais</div>
+                    <div class="filter-chip" data-filter="fazenda-rio-grande">Fazenda Rio Grande</div>
+                </div>
+                
+                <!-- Search Form -->
+                <div class="form-group">
+                    <label class="form-label" for="userAddress">📍 Seu endereço atual:</label>
+                    <div class="autocomplete-container">
+                        <input type="text" id="userAddress" class="form-input" 
+                               placeholder="Digite seu endereço... (Ex: Rua das Flores, 123)"
+                               autocomplete="off">
+                        <div class="autocomplete-suggestions" id="addressSuggestions"></div>
+                    </div>
+                </div>
+                
+                <div class="filters-container">
+                    <div class="form-group">
+                        <label class="form-label" for="destination">🎯 Destino (opcional):</label>
+                        <div class="autocomplete-container">
+                            <input type="text" id="destination" class="form-input" 
+                                   placeholder="Para onde você vai?"
+                                   autocomplete="off">
+                            <div class="autocomplete-suggestions" id="destinationSuggestions"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="maxDistance">📏 Distância máxima:</label>
+                        <select id="maxDistance" class="form-select">
+                            <option value="5">Até 5 km</option>
+                            <option value="3" selected>Até 3 km</option>
+                            <option value="1">Até 1 km</option>
+                            <option value="0.5">Até 500m</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button class="btn" onclick="buscarOnibus()">
+                    🔍 Encontrar Ônibus Inteligente
+                </button>
+                
+                <button class="btn btn-secondary" onclick="buscarPorVoz()" style="margin-top: 10px;">
+                    🎤 Busca por Voz
+                </button>
+            </div>
+
+            <!-- Admin Panel -->
+            <div class="admin-panel">
+                <h2 class="panel-title">⚙️ Gerenciar Rotas</h2>
                 
                 <div class="form-group">
-                    <label for="busNumber">Número do Ônibus:</label>
-                    <input type="text" id="busNumber" placeholder="Ex: 101">
+                    <label class="form-label" for="busNumber">🚌 Número da Linha:</label>
+                    <input type="text" id="busNumber" class="form-input" placeholder="Ex: 247">
                 </div>
                 
                 <div class="form-group">
-                    <label for="busRoute">Nome da Rota:</label>
-                    <input type="text" id="busRoute" placeholder="Ex: Centro - Terminal">
+                    <label class="form-label" for="busRoute">📋 Nome da Rota:</label>
+                    <input type="text" id="busRoute" class="form-input" placeholder="Ex: VOLVO FÁBRICA - ÁGUAS CLARAS">
                 </div>
                 
                 <div class="form-group">
-                    <label for="busStops">Endereços da Rota (um por linha):</label>
-                    <textarea id="busStops" rows="5" placeholder="Rua A, 100&#10;Avenida B, 200&#10;Praça C, s/n"></textarea>
+                    <label class="form-label" for="busStops">📍 Paradas da Rota:</label>
+                    <textarea id="busStops" class="form-textarea" rows="4" 
+                              placeholder="Digite uma parada por linha:&#10;Rua A 100 Bairro Cidade&#10;Avenida B 200 Centro&#10;Praça C s/n"></textarea>
                 </div>
                 
-                <button onclick="adicionarRota()">➕ Adicionar Rota</button>
+                <button class="btn" onclick="adicionarRota()">➕ Adicionar Rota</button>
                 
                 <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-                    <p>📁 Clique para importar arquivo CSV</p>
-                    <small>Formato: Número,Rota,Endereços</small>
+                    <p>📁 <strong>Arrastar arquivo CSV aqui</strong></p>
+                    <p>ou clique para selecionar</p>
+                    <small>Formato: Número,Rota,Parada1,Parada2...</small>
                     <input type="file" id="fileInput" accept=".csv" style="display: none;" onchange="importarCSV(event)">
                 </div>
                 
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button onclick="exportarBackup()" style="background: linear-gradient(45deg, #FF9800, #FFB74D); font-size: 14px; padding: 8px 15px;">
-                        📤 Exportar
-                    </button>
-                    <button onclick="limparTudo()" style="background: linear-gradient(45deg, #f44336, #e57373); font-size: 14px; padding: 8px 15px;">
-                        🗑️ Limpar
-                    </button>
-                </div>
-                
-                <div id="successMessage" class="success-message">
-                    Operação realizada com sucesso!
-                </div>
-                
-                <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-top: 15px; border-left: 4px solid #2196F3;">
-                    <h4 style="margin: 0 0 10px 0; color: #1976D2;">💾 Armazenamento Local</h4>
-                    <p style="margin: 0; font-size: 0.9em; color: #555;">
-                        ✅ Dados salvos automaticamente<br>
-                        ✅ Funciona offline<br>
-                        ✅ Backup recomendado
-                    </p>
-                </div>
-                
-                <div class="routes-list">
-                    <h4>Rotas Cadastradas:</h4>
-                    <div id="routesList"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="exportarBackup()">📤 Backup</button>
+                    <button class="btn btn-secondary" onclick="limparTudo()">🗑️ Limpar</button>
+                    <button class="btn btn-secondary" onclick="toggleModoEscuro()">🌙 Tema</button>
                 </div>
             </div>
         </div>
+
+        <!-- Search Results -->
+        <div class="results-container" id="searchResults">
+            <div class="results-header">
+                <h3 class="results-title">🎯 Resultados da Busca</h3>
+                <div class="results-count" id="resultsCount">0 rotas encontradas</div>
+                <button class="btn btn-secondary" onclick="mostrarNoMapa()">🗺️ Ver no Mapa</button>
+            </div>
+            <div id="busResults"></div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="map-container" id="mapContainer">
+            <div class="results-header">
+                <h3 class="results-title">🗺️ Mapa das Rotas</h3>
+                <button class="btn btn-secondary" onclick="fecharMapa()">✖️ Fechar</button>
+            </div>
+            <div id="map"></div>
+        </div>
+
+        <!-- Routes Management -->
+        <div class="routes-management">
+            <h3 class="panel-title">📋 Rotas Cadastradas</h3>
+            <div id="routesList"></div>
+        </div>
     </div>
 
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script>
         // Variáveis globais
         let rotasOnibus = [];
         let resultadosBusca = null;
-
-        // Armazenamento local
-        function salvarDados(dados) {
-            try {
-                localStorage.setItem('rotasOnibus', JSON.stringify(dados));
-                console.log('Dados salvos com sucesso');
-            } catch (e) {
-                console.error('Erro ao salvar dados:', e);
+        let map = null;
+        let addressCache = new Map();
+        let recognition = null;
+        
+        // Cache de coordenadas para performance
+        const coordsCache = new Map();
+        
+        // Lista de endereços conhecidos para autocomplete
+        let enderecosConhecidos = new Set();
+        
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSystem();
+            setupEventListeners();
+            setupVoiceRecognition();
+            setupDragAndDrop();
+        });
+        
+        function initializeSystem() {
+            rotasOnibus = carregarDados();
+            atualizarEstatisticas();
+            atualizarListaRotas();
+            preencherEnderecosConhecidos();
+            console.log('🚌 Sistema iniciado com', rotasOnibus.length, 'rotas');
+        }
+        
+        function setupEventListeners() {
+            // Autocomplete para endereços
+            document.getElementById('userAddress').addEventListener('input', handleAddressInput);
+            document.getElementById('destination').addEventListener('input', handleDestinationInput);
+            
+            // Filtros rápidos
+            document.querySelectorAll('.filter-chip').forEach(chip => {
+                chip.addEventListener('click', function() {
+                    // Remove active de todos os chips
+                    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+                    // Adiciona active no clicado
+                    this.classList.add('active');
+                    // Aplica filtro
+                    aplicarFiltroRapido(this.dataset.filter);
+                });
+            });
+            
+            // Enter para buscar
+            document.getElementById('userAddress').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') buscarOnibus();
+            });
+            
+            // Fechar sugestões ao clicar fora
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.autocomplete-container')) {
+                    document.querySelectorAll('.autocomplete-suggestions').forEach(s => s.style.display = 'none');
+                }
+            });
+        }
+        
+        function setupVoiceRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.lang = 'pt-BR';
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                
+                recognition.onresult = function(event) {
+                    const transcript = event.results[0][0].transcript;
+                    document.getElementById('userAddress').value = transcript;
+                    showToast('🎤 Endereço capturado: ' + transcript);
+                };
+                
+                recognition.onerror = function(event) {
+                    showToast('❌ Erro no reconhecimento de voz', 'error');
+                };
+            } else {
+                document.querySelector('[onclick="buscarPorVoz()"]').style.display = 'none';
             }
         }
-
+        
+        function setupDragAndDrop() {
+            const uploadArea = document.querySelector('.upload-area');
+            
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].name.endsWith('.csv')) {
+                    processCSVFile(files[0]);
+                } else {
+                    showToast('❌ Por favor, solte apenas arquivos CSV', 'error');
+                }
+            });
+        }
+        
+        function handleAddressInput(e) {
+            const query = e.target.value;
+            if (query.length >= 3) {
+                showAddressSuggestions(query, 'addressSuggestions');
+            } else {
+                document.getElementById('addressSuggestions').style.display = 'none';
+            }
+        }
+        
+        function handleDestinationInput(e) {
+            const query = e.target.value;
+            if (query.length >= 3) {
+                showAddressSuggestions(query, 'destinationSuggestions');
+            } else {
+                document.getElementById('destinationSuggestions').style.display = 'none';
+            }
+        }
+        
+        function showAddressSuggestions(query, containerId) {
+            const suggestions = Array.from(enderecosConhecidos)
+                .filter(endereco => 
+                    endereco.toLowerCase().includes(query.toLowerCase())
+                )
+                .slice(0, 5);
+            
+            const container = document.getElementById(containerId);
+            
+            if (suggestions.length > 0) {
+                container.innerHTML = suggestions
+                    .map(suggestion => `
+                        <div class="autocomplete-suggestion" onclick="selectSuggestion('${suggestion}', '${containerId}')">
+                            ${suggestion}
+                        </div>
+                    `).join('');
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+        
+        function selectSuggestion(suggestion, containerId) {
+            const inputId = containerId === 'addressSuggestions' ? 'userAddress' : 'destination';
+            document.getElementById(inputId).value = suggestion;
+            document.getElementById(containerId).style.display = 'none';
+        }
+        
+        function preencherEnderecosConhecidos() {
+            enderecosConhecidos.clear();
+            rotasOnibus.forEach(rota => {
+                rota.stops.forEach(parada => {
+                    enderecosConhecidos.add(parada);
+                    // Adiciona variações da parada
+                    const palavras = parada.split(' ');
+                    if (palavras.length > 2) {
+                        enderecosConhecidos.add(palavras.slice(0, -1).join(' ')); // Sem a cidade
+                        enderecosConhecidos.add(palavras[0] + ' ' + palavras[1]); // Rua + número
+                    }
+                });
+            });
+        }
+        
+        function aplicarFiltroRapido(filtro) {
+            const input = document.getElementById('userAddress');
+            const suggestions = document.getElementById('addressSuggestions');
+            
+            let enderecosFilterados = [];
+            
+            switch(filtro) {
+                case 'curitiba':
+                    enderecosFilterados = Array.from(enderecosConhecidos)
+                        .filter(e => e.toLowerCase().includes('curitiba'))
+                        .slice(0, 10);
+                    break;
+                case 'campo-largo':
+                    enderecosFilterados = Array.from(enderecosConhecidos)
+                        .filter(e => e.toLowerCase().includes('campo largo'))
+                        .slice(0, 10);
+                    break;
+                case 'pinhais':
+                    enderecosFilterados = Array.from(enderecosConhecidos)
+                        .filter(e => e.toLowerCase().includes('pinhais'))
+                        .slice(0, 10);
+                    break;
+                case 'fazenda-rio-grande':
+                    enderecosFilterados = Array.from(enderecosConhecidos)
+                        .filter(e => e.toLowerCase().includes('fazenda rio grande'))
+                        .slice(0, 10);
+                    break;
+                default:
+                    suggestions.style.display = 'none';
+                    return;
+            }
+            
+            if (enderecosFilterados.length > 0) {
+                suggestions.innerHTML = enderecosFilterados
+                    .map(endereco => `
+                        <div class="autocomplete-suggestion" onclick="selectSuggestion('${endereco}', 'addressSuggestions')">
+                            ${endereco}
+                        </div>
+                    `).join('');
+                suggestions.style.display = 'block';
+            }
+        }
+        
+        function buscarPorVoz() {
+            if (recognition) {
+                recognition.start();
+                showToast('🎤 Fale agora seu endereço...');
+            }
+        }
+        
+        // Armazenamento em memória (compatível com Claude.ai)
+        let dadosMemoria = null;
+        
+        function salvarDados(dados) {
+            try {
+                dadosMemoria = {
+                    rotas: dados,
+                    timestamp: Date.now(),
+                    version: '2.0'
+                };
+                
+                console.log('✅ Dados salvos em memória');
+                showToast('💾 Dados salvos em memória (sessão atual)');
+            } catch (e) {
+                console.error('❌ Erro ao salvar dados:', e);
+                showToast('❌ Erro ao salvar dados', 'error');
+            }
+        }
+        
         function carregarDados() {
             try {
-                const dados = localStorage.getItem('rotasOnibus');
-                if (dados) {
-                    return JSON.parse(dados);
+                // Primeiro tenta carregar de memória
+                if (dadosMemoria && dadosMemoria.rotas) {
+                    return dadosMemoria.rotas;
+                }
+                
+                // Tenta localStorage se disponível
+                if (typeof Storage !== 'undefined' && window.localStorage) {
+                    const chunks = parseInt(localStorage.getItem('rotasOnibus_chunks') || '0');
+                    
+                    if (chunks > 0) {
+                        let jsonString = '';
+                        for (let i = 0; i < chunks; i++) {
+                            jsonString += localStorage.getItem(`rotasOnibus_${i}`) || '';
+                        }
+                        
+                        if (jsonString) {
+                            const data = JSON.parse(jsonString);
+                            dadosMemoria = data;
+                            return data.rotas || data;
+                        }
+                    }
+                    
+                    const dadosAntigos = localStorage.getItem('rotasOnibus');
+                    if (dadosAntigos) {
+                        const dados = JSON.parse(dadosAntigos);
+                        dadosMemoria = { rotas: dados, timestamp: Date.now(), version: '2.0' };
+                        return dados;
+                    }
                 }
             } catch (e) {
-                console.error('Erro ao carregar dados:', e);
+                console.error('❌ Erro ao carregar dados:', e);
+                showToast('⚠️ Usando dados padrão', 'warning');
             }
             
             // Dados padrão
-            return [
+            const dadosPadrao = [
                 {
                     number: "101",
                     route: "Centro - Terminal Sul",
                     stops: [
-                        "Praça da Sé, Centro",
-                        "Rua XV de Novembro, 500", 
-                        "Avenida Paulista, 1000",
-                        "Terminal Sul"
-                    ]
-                },
-                {
-                    number: "202", 
-                    route: "Bairro Norte - Shopping",
-                    stops: [
-                        "Bairro Norte, Rua A",
-                        "Avenida Principal, 200",
-                        "Centro Comercial", 
-                        "Shopping Center"
+                        "Praça da Sé Centro Curitiba",
+                        "Rua XV de Novembro 500 Centro Curitiba", 
+                        "Avenida Paulista 1000 Batel Curitiba",
+                        "Terminal Sul Curitiba"
                     ]
                 }
             ];
+            
+            dadosMemoria = { rotas: dadosPadrao, timestamp: Date.now(), version: '2.0' };
+            return dadosPadrao;
         }
-
-        // Cálculo de distância
+        
+        function chunkString(str, size) {
+            const chunks = [];
+            for (let i = 0; i < str.length; i += size) {
+                chunks.push(str.slice(i, i + size));
+            }
+            return chunks;
+        }
+        
+        // Cálculo de distância otimizado
         function calcularDistancia(lat1, lon1, lat2, lon2) {
-            const R = 6371;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const R = 6371; // Raio da Terra em km
+            const dLat = toRadians(lat2 - lat1);
+            const dLon = toRadians(lon2 - lon1);
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * 
                     Math.sin(dLon/2) * Math.sin(dLon/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return R * c;
         }
-
-        // Similaridade entre strings
+        
+        function toRadians(degrees) {
+            return degrees * (Math.PI / 180);
+        }
+        
+        // Similaridade entre strings melhorada
         function calcularSimilaridade(str1, str2) {
             const normalizar = function(s) {
-                return s.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+                return s.toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+                    .replace(/[^\w\s]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
             };
             
             const n1 = normalizar(str1);
             const n2 = normalizar(str2);
             
+            // Busca exata
+            if (n1 === n2) return 1.0;
+            
+            // Contém
             if (n1.includes(n2) || n2.includes(n1)) {
                 return 0.9;
             }
             
-            const palavras1 = n1.split(' ').filter(function(w) { return w.length > 2; });
-            const palavras2 = n2.split(' ').filter(function(w) { return w.length > 2; });
+            // Similaridade por palavras
+            const palavras1 = n1.split(' ').filter(w => w.length > 2);
+            const palavras2 = n2.split(' ').filter(w => w.length > 2);
+            
+            if (palavras1.length === 0 || palavras2.length === 0) return 0;
             
             let matches = 0;
-            const total = Math.max(palavras1.length, palavras2.length);
+            let totalWeight = 0;
             
-            palavras1.forEach(function(w1) {
-                palavras2.forEach(function(w2) {
+            palavras1.forEach((w1, i) => {
+                const peso = i === 0 ? 2 : 1; // Primeira palavra tem peso maior
+                totalWeight += peso;
+                
+                palavras2.forEach((w2, j) => {
                     if (w1 === w2) {
-                        matches++;
+                        matches += peso;
                     } else if (w1.includes(w2) || w2.includes(w1)) {
-                        matches += 0.7;
+                        matches += peso * 0.7;
+                    } else if (levenshteinDistance(w1, w2) <= 2) {
+                        matches += peso * 0.5;
                     }
                 });
             });
             
-            return Math.min(matches / total, 1);
+            return Math.min(matches / totalWeight, 1);
         }
-
-        // Geocodificação
+        
+        function levenshteinDistance(str1, str2) {
+            const matrix = [];
+            for (let i = 0; i <= str2.length; i++) {
+                matrix[i] = [i];
+            }
+            for (let j = 0; j <= str1.length; j++) {
+                matrix[0][j] = j;
+            }
+            for (let i = 1; i <= str2.length; i++) {
+                for (let j = 1; j <= str1.length; j++) {
+                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            matrix[i][j - 1] + 1,
+                            matrix[i - 1][j] + 1
+                        );
+                    }
+                }
+            }
+            return matrix[str2.length][str1.length];
+        }
+        
+        // Geocodificação com cache
         async function buscarCoordenadas(endereco) {
+            // Verifica cache primeiro
+            const cacheKey = endereco.toLowerCase().trim();
+            if (coordsCache.has(cacheKey)) {
+                return coordsCache.get(cacheKey);
+            }
+            
             try {
-                const url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(endereco) + '&limit=1';
-                const response = await fetch(url);
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco + ', Curitiba, Brasil')}&limit=1&addressdetails=1`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'User-Agent': 'SistemaOnibus/2.0'
+                    }
+                });
+                
+                if (!response.ok) throw new Error('Erro na requisição');
+                
                 const dados = await response.json();
                 
+                let resultado = null;
                 if (dados.length > 0) {
-                    return {
+                    resultado = {
                         lat: parseFloat(dados[0].lat),
                         lng: parseFloat(dados[0].lon),
-                        nome: dados[0].display_name
+                        nome: dados[0].display_name,
+                        accuracy: dados[0].importance || 0.5
                     };
+                    
+                    // Salva no cache
+                    coordsCache.set(cacheKey, resultado);
                 }
-                return null;
+                
+                // Pequeno delay para não sobrecarregar a API
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                return resultado;
             } catch (error) {
-                console.error('Erro na geocodificação:', error);
+                console.error('❌ Erro na geocodificação:', error);
                 return null;
             }
         }
-
-        // Busca principal
+        
+        // Busca principal otimizada
         async function buscarOnibus() {
             const enderecoUsuario = document.getElementById('userAddress').value.trim();
             const destino = document.getElementById('destination').value.trim();
+            const maxDistancia = parseFloat(document.getElementById('maxDistance').value);
             
             if (!enderecoUsuario) {
-                alert('Digite seu endereço atual');
+                showToast('❌ Digite seu endereço atual', 'error');
                 return;
             }
             
-            const resultDiv = document.getElementById('searchResult');
+            const resultDiv = document.getElementById('searchResults');
             const busResults = document.getElementById('busResults');
             
-            busResults.innerHTML = '<div class="loading">🔍 Procurando ônibus próximos...</div>';
+            // Mostra loading
+            busResults.innerHTML = '<div class="loading">🔍 Analisando rotas inteligentemente...</div>';
             resultDiv.style.display = 'block';
             
-            const coordsUsuario = await buscarCoordenadas(enderecoUsuario);
-            if (!coordsUsuario) {
-                busResults.innerHTML = '<div style="color: #f44336; text-align: center; padding: 20px;">❌ Endereço não encontrado</div>';
-                return;
-            }
+            // Atualiza estatísticas
+            document.getElementById('lastSearch').textContent = new Date().toLocaleTimeString();
             
-            const resultados = [];
-            
-            for (let i = 0; i < rotasOnibus.length; i++) {
-                const onibus = rotasOnibus[i];
-                let melhorMatch = {
-                    score: 0,
-                    tipo: '',
-                    parada: '',
-                    distancia: Infinity,
-                    coords: null,
-                    indice: -1
-                };
+            try {
+                const coordsUsuario = await buscarCoordenadas(enderecoUsuario);
+                if (!coordsUsuario) {
+                    busResults.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #f44336;">
+                            <h3>❌ Endereço não encontrado</h3>
+                            <p>Tente ser mais específico ou use uma das sugestões</p>
+                        </div>
+                    `;
+                    return;
+                }
                 
-                for (let j = 0; j < onibus.stops.length; j++) {
-                    const parada = onibus.stops[j];
-                    const scoreTexto = calcularSimilaridade(enderecoUsuario, parada);
+                const resultados = [];
+                
+                // Busca paralela para melhor performance
+                const promises = rotasOnibus.map(async (onibus) => {
+                    let melhorMatch = {
+                        score: 0,
+                        tipo: '',
+                        parada: '',
+                        distancia: Infinity,
+                        coords: null,
+                        indice: -1
+                    };
                     
-                    const coordsParada = await buscarCoordenadas(parada);
-                    if (coordsParada) {
-                        const distancia = calcularDistancia(
-                            coordsUsuario.lat, coordsUsuario.lng,
-                            coordsParada.lat, coordsParada.lng
-                        );
+                    // Busca paralela nas paradas
+                    const paradaPromises = onibus.stops.map(async (parada, j) => {
+                        const scoreTexto = calcularSimilaridade(enderecoUsuario, parada);
                         
-                        const scoreProximidade = Math.max(0, (2 - distancia) / 2);
+                        let distancia = Infinity;
+                        let coordsParada = null;
+                        
+                        if (scoreTexto > 0.3) { // Só busca coordenadas se tem chance
+                            coordsParada = await buscarCoordenadas(parada);
+                            if (coordsParada) {
+                                distancia = calcularDistancia(
+                                    coordsUsuario.lat, coordsUsuario.lng,
+                                    coordsParada.lat, coordsParada.lng
+                                );
+                            }
+                        }
+                        
+                        const scoreProximidade = distancia <= maxDistancia ? 
+                            Math.max(0, (maxDistancia - distancia) / maxDistancia) : 0;
+                        
                         const scoreCombinado = (scoreTexto * 0.6) + (scoreProximidade * 0.4);
                         
-                        if (scoreCombinado > melhorMatch.score || 
-                           (scoreCombinado === melhorMatch.score && distancia < melhorMatch.distancia)) {
+                        // Bonus para correspondência de destino
+                        let bonusDestino = 0;
+                        if (destino) {
+                            const scoreDestino = calcularSimilaridade(destino, parada);
+                            bonusDestino = scoreDestino * 0.3;
+                        }
+                        
+                        const scoreTotal = scoreCombinado + bonusDestino;
+                        
+                        return {
+                            score: scoreTotal,
+                            scoreTexto,
+                            distancia,
+                            parada,
+                            coords: coordsParada,
+                            indice: j
+                        };
+                    });
+                    
+                    const resultadosParadas = await Promise.all(paradaPromises);
+                    
+                    // Encontra a melhor parada
+                    resultadosParadas.forEach(resultado => {
+                        if ((resultado.score > melhorMatch.score) || 
+                            (resultado.score === melhorMatch.score && resultado.distancia < melhorMatch.distancia)) {
+                            
                             melhorMatch = {
-                                score: scoreCombinado,
-                                tipo: scoreTexto > 0.7 ? 'exato' : 'proximidade',
-                                parada: parada,
-                                distancia: distancia,
-                                coords: coordsParada,
-                                indice: j
+                                score: resultado.score,
+                                tipo: resultado.scoreTexto > 0.7 ? 'exato' : 
+                                      resultado.distancia <= 0.5 ? 'muito-proximo' :
+                                      resultado.distancia <= 1 ? 'proximo' : 'distante',
+                                parada: resultado.parada,
+                                distancia: resultado.distancia,
+                                coords: resultado.coords,
+                                indice: resultado.indice
                             };
                         }
-                    }
-                    
-                    if (destino) {
-                        const scoreDestino = calcularSimilaridade(destino, parada);
-                        if (scoreDestino > melhorMatch.score) {
-                            melhorMatch.score = scoreDestino;
-                            melhorMatch.tipo = 'destino';
-                            melhorMatch.parada = parada;
-                            melhorMatch.indice = j;
-                        }
-                    }
-                }
-                
-                if (melhorMatch.score > 0.1 || melhorMatch.distancia <= 3) {
-                    resultados.push({
-                        onibus: onibus,
-                        match: melhorMatch,
-                        coordsUsuario: coordsUsuario
                     });
-                }
+                    
+                    return { onibus, melhorMatch };
+                });
+                
+                const resultadosOnibus = await Promise.all(promises);
+                
+                // Filtra e ordena resultados
+                resultadosOnibus.forEach(({ onibus, melhorMatch }) => {
+                    if (melhorMatch.score > 0.2 || melhorMatch.distancia <= maxDistancia) {
+                        resultados.push({
+                            onibus: onibus,
+                            match: melhorMatch,
+                            coordsUsuario: coordsUsuario
+                        });
+                    }
+                });
+                
+                // Ordenação inteligente
+                resultados.sort((a, b) => {
+                    // Prioriza score alto
+                    if (Math.abs(b.match.score - a.match.score) > 0.1) {
+                        return b.match.score - a.match.score;
+                    }
+                    // Em caso de empate, prioriza distância
+                    return a.match.distancia - b.match.distancia;
+                });
+                
+                resultadosBusca = {
+                    resultados: resultados,
+                    coordsUsuario: coordsUsuario,
+                    enderecoUsuario: enderecoUsuario
+                };
+                
+                exibirResultados(resultados, enderecoUsuario);
+                
+            } catch (error) {
+                console.error('❌ Erro na busca:', error);
+                busResults.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #f44336;">
+                        <h3>❌ Erro na busca</h3>
+                        <p>Tente novamente em alguns momentos</p>
+                    </div>
+                `;
             }
-            
-            resultados.sort(function(a, b) {
-                if (b.match.score !== a.match.score) {
-                    return b.match.score - a.match.score;
-                }
-                return a.match.distancia - b.match.distancia;
-            });
-            
-            resultadosBusca = {
-                resultados: resultados,
-                coordsUsuario: coordsUsuario,
-                enderecoUsuario: enderecoUsuario
-            };
-            
-            exibirResultados(resultados, enderecoUsuario);
         }
-
+        
         function exibirResultados(resultados, enderecoUsuario) {
             const busResults = document.getElementById('busResults');
+            const resultsCount = document.getElementById('resultsCount');
+            
+            resultsCount.textContent = `${resultados.length} rota${resultados.length !== 1 ? 's' : ''} encontrada${resultados.length !== 1 ? 's' : ''}`;
             
             if (resultados.length === 0) {
-                busResults.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;"><div style="font-size: 1.2em; margin-bottom: 10px;">😔 Nenhum ônibus encontrado</div><p>Não encontramos rotas próximas ao endereço:<br><strong>' + enderecoUsuario + '</strong></p></div>';
+                busResults.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #666;">
+                        <h3>😔 Nenhuma rota encontrada</h3>
+                        <p>Não encontramos rotas próximas ao endereço:</p>
+                        <p><strong>${enderecoUsuario}</strong></p>
+                        <br>
+                        <p>💡 <strong>Dicas:</strong></p>
+                        <ul style="text-align: left; display: inline-block;">
+                            <li>Tente usar um endereço mais específico</li>
+                            <li>Verifique se digitou corretamente</li>
+                            <li>Use as sugestões de endereços</li>
+                            <li>Aumente a distância máxima</li>
+                        </ul>
+                    </div>
+                `;
                 return;
             }
             
-            let html = '<div style="background: #e8f5e9; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #4CAF50;"><h4 style="margin: 0 0 10px 0; color: #2e7d32;">📍 Busca realizada:</h4><p style="margin: 0; font-weight: 600;">' + enderecoUsuario + '</p><small style="color: #666;">Encontramos ' + resultados.length + ' linha(s) próxima(s)</small></div>';
+            let html = `
+                <div style="background: linear-gradient(135deg, #e8f5e9, #c8e6c9); 
+                           padding: 20px; border-radius: 15px; margin-bottom: 25px; 
+                           border-left: 5px solid #4CAF50;">
+                    <h4 style="margin: 0 0 10px 0; color: #2e7d32; display: flex; align-items: center; gap: 10px;">
+                        📍 <span>Busca realizada com sucesso!</span>
+                    </h4>
+                    <p style="margin: 0; font-weight: 600; font-size: 1.1rem;">${enderecoUsuario}</p>
+                    <div style="margin-top: 15px; display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+                        <small style="color: #666; background: white; padding: 8px 12px; border-radius: 20px; font-weight: 500;">
+                            ✅ ${resultados.length} linha${resultados.length !== 1 ? 's' : ''} encontrada${resultados.length !== 1 ? 's' : ''}
+                        </small>
+                        <small style="color: #666; background: white; padding: 8px 12px; border-radius: 20px; font-weight: 500;">
+                            🎯 Ordenado por relevância
+                        </small>
+                    </div>
+                </div>
+            `;
             
-            for (let i = 0; i < resultados.length; i++) {
-                const resultado = resultados[i];
+            resultados.forEach((resultado, index) => {
                 const textoDistancia = resultado.match.distancia < 1 ? 
                     Math.round(resultado.match.distancia * 1000) + 'm' : 
                     resultado.match.distancia.toFixed(1) + 'km';
                 
-                let status = { icone: '📍', texto: 'Próximo', classe: 'status-far' };
+                let status = { icone: '📍', texto: 'Distante', classe: 'status-far' };
+                
                 if (resultado.match.tipo === 'exato') {
-                    status = { icone: '✅', texto: 'Passa no local', classe: 'status-exact' };
-                } else if (resultado.match.distancia <= 0.5) {
+                    status = { icone: '🎯', texto: 'Passa no local', classe: 'status-exact' };
+                } else if (resultado.match.tipo === 'muito-proximo') {
                     status = { icone: '🚶‍♂️', texto: 'Muito próximo', classe: 'status-exact' };
-                } else if (resultado.match.distancia <= 1) {
+                } else if (resultado.match.tipo === 'proximo') {
                     status = { icone: '🚶‍♂️', texto: 'Caminhada curta', classe: 'status-close' };
+                } else if (resultado.match.distancia <= 2) {
+                    status = { icone: '📍', texto: 'Próximo', classe: 'status-close' };
                 }
                 
-                html += '<div class="bus-card"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div><div class="bus-number">Linha ' + resultado.onibus.number + '</div><div class="bus-route">' + resultado.onibus.route + '</div></div><div style="text-align: right;"><div class="status-badge ' + status.classe + '">' + status.icone + ' ' + status.texto + '</div><div class="distance">' + textoDistancia + '</div></div></div><div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);"><div style="font-size: 0.9em; opacity: 0.9;"><strong>Ponto mais próximo:</strong><br>📍 ' + resultado.match.parada + '</div></div><div style="display: flex; gap: 10px; margin-top: 15px;"><a href="javascript:void(0)" onclick="abrirTrajetoCompleto(' + i + ')" style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; cursor: pointer; flex: 1; text-decoration: none; text-align: center;">🗺️ Ver Trajeto Completo</a><a href="https://www.google.com/maps/dir/' + encodeURIComponent(enderecoUsuario) + '/' + encodeURIComponent(resultado.match.parada) + '" target="_blank" style="background: #2196F3; color: white; padding: 8px 15px; border-radius: 20px; font-size: 0.8em; text-decoration: none; text-align: center; flex: 1;">🧭 Ir ao Ponto</a></div></div>';
-            }
+                const relevancia = Math.round(resultado.match.score * 100);
+                
+                html += `
+                    <div class="bus-card" style="position: relative;">
+                        <div style="position: absolute; top: 15px; right: 15px; 
+                                    background: rgba(255,255,255,0.2); padding: 5px 10px; 
+                                    border-radius: 10px; font-size: 12px; font-weight: 600;">
+                            #${index + 1}
+                        </div>
+                        
+                        <div class="bus-header">
+                            <div>
+                                <div class="bus-number">🚌 Linha ${resultado.onibus.number}</div>
+                                <div class="bus-route">${resultado.onibus.route}</div>
+                            </div>
+                            <div class="bus-status">
+                                <div class="status-badge ${status.classe}">
+                                    ${status.icone} ${status.texto}
+                                </div>
+                                <div class="distance-badge">${textoDistancia}</div>
+                                <div style="background: rgba(255,255,255,0.2); padding: 4px 8px; 
+                                           border-radius: 10px; font-size: 11px;">
+                                    ${relevancia}% relevante
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bus-details">
+                            <div style="font-size: 0.95rem; margin-bottom: 8px;">
+                                <strong>📍 Parada mais próxima:</strong>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.15); padding: 12px; 
+                                       border-radius: 8px; font-size: 0.9rem;">
+                                ${resultado.match.parada}
+                            </div>
+                            <div style="margin-top: 10px; font-size: 0.8rem; opacity: 0.9;">
+                                📊 Total de paradas: ${resultado.onibus.stops.length} | 
+                                🎯 Parada nº ${resultado.match.indice + 1}
+                            </div>
+                        </div>
+                        
+                        <div class="bus-actions">
+                            <a href="javascript:void(0)" onclick="mostrarRotaCompleta(${index})" 
+                               class="btn-action btn-map">
+                                🗺️ Ver Trajeto Completo
+                            </a>
+                            <a href="https://www.google.com/maps/dir/${encodeURIComponent(enderecoUsuario)}/${encodeURIComponent(resultado.match.parada)}" 
+                               target="_blank" class="btn-action btn-route">
+                                🧭 Como Chegar
+                            </a>
+                            <a href="javascript:void(0)" onclick="adicionarFavorito('${resultado.onibus.number}')" 
+                               class="btn-action btn-favorite">
+                                ⭐ Favoritar
+                            </a>
+                        </div>
+                    </div>
+                `;
+            });
             
             busResults.innerHTML = html;
         }
-
-        function abrirTrajetoCompleto(indiceResultado) {
+        
+        function mostrarRotaCompleta(indiceResultado) {
             if (!resultadosBusca || !resultadosBusca.resultados[indiceResultado]) {
-                alert('Dados não encontrados. Faça uma nova busca.');
+                showToast('❌ Dados não encontrados. Faça uma nova busca.', 'error');
                 return;
             }
             
             const resultado = resultadosBusca.resultados[indiceResultado];
-            const onibus = resultado.onibus;
-            const enderecoUsuario = resultadosBusca.enderecoUsuario;
-            
-            const waypoints = [enderecoUsuario].concat(onibus.stops);
-            const url = 'https://www.google.com/maps/dir/' + waypoints.map(function(parada) {
-                return encodeURIComponent(parada);
-            }).join('/');
-            
-            window.open(url, '_blank');
+            mostrarNoMapa([resultado]);
         }
-
-        function abrirTrajetoRotaCompleta(indiceRota) {
-            const rota = rotasOnibus[indiceRota];
-            if (!rota) {
-                alert('Rota não encontrada.');
+        
+        async function mostrarNoMapa(resultadosEspecificos = null) {
+            const mapContainer = document.getElementById('mapContainer');
+            const resultados = resultadosEspecificos || resultadosBusca?.resultados || [];
+            
+            if (resultados.length === 0) {
+                showToast('❌ Nenhuma rota para mostrar no mapa', 'error');
                 return;
             }
             
-            const url = 'https://www.google.com/maps/dir/' + rota.stops.map(function(parada) {
-                return encodeURIComponent(parada);
-            }).join('/');
+            mapContainer.style.display = 'block';
+            mapContainer.scrollIntoView({ behavior: 'smooth' });
             
-            window.open(url, '_blank');
+            // Inicializa o mapa se não existir
+            if (!map) {
+                map = L.map('map').setView([-25.4284, -49.2733], 11); // Curitiba
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+            }
+            
+            // Limpa o mapa
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            const cores = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'];
+            const bounds = [];
+            
+            // Adiciona marcador do usuário
+            if (resultadosBusca?.coordsUsuario) {
+                const userMarker = L.marker([resultadosBusca.coordsUsuario.lat, resultadosBusca.coordsUsuario.lng])
+                    .addTo(map)
+                    .bindPopup(`
+                        <div style="text-align: center; font-weight: bold;">
+                            📍 Sua Localização<br>
+                            <small>${resultadosBusca.enderecoUsuario}</small>
+                        </div>
+                    `);
+                bounds.push([resultadosBusca.coordsUsuario.lat, resultadosBusca.coordsUsuario.lng]);
+            }
+            
+            // Processa cada rota
+            for (let i = 0; i < Math.min(resultados.length, 5); i++) { // Limita a 5 rotas para performance
+                const resultado = resultados[i];
+                const cor = cores[i % cores.length];
+                
+                try {
+                    showToast(`🗺️ Carregando rota ${resultado.onibus.number}...`);
+                    
+                    const coordenadas = [];
+                    const markers = [];
+                    
+                    // Busca coordenadas de todas as paradas
+                    for (let j = 0; j < resultado.onibus.stops.length; j++) {
+                        const parada = resultado.onibus.stops[j];
+                        const coords = await buscarCoordenadas(parada);
+                        
+                        if (coords) {
+                            coordenadas.push([coords.lat, coords.lng]);
+                            bounds.push([coords.lat, coords.lng]);
+                            
+                            // Destaca a parada mais próxima
+                            const isClosest = j === resultado.match.indice;
+                            
+                            const marker = L.marker([coords.lat, coords.lng], {
+                                icon: L.divIcon({
+                                    className: 'custom-marker',
+                                    html: `
+                                        <div style="
+                                            background: ${isClosest ? '#FF6B6B' : cor}; 
+                                            color: white; 
+                                            border-radius: 50%; 
+                                            width: ${isClosest ? '30px' : '24px'}; 
+                                            height: ${isClosest ? '30px' : '24px'}; 
+                                            display: flex; 
+                                            align-items: center; 
+                                            justify-content: center; 
+                                            font-size: ${isClosest ? '14px' : '12px'}; 
+                                            font-weight: bold;
+                                            border: ${isClosest ? '3px solid white' : '2px solid white'};
+                                            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                                        ">
+                                            ${isClosest ? '🎯' : (j + 1)}
+                                        </div>
+                                    `,
+                                    iconSize: [isClosest ? 30 : 24, isClosest ? 30 : 24],
+                                    iconAnchor: [isClosest ? 15 : 12, isClosest ? 15 : 12]
+                                })
+                            }).addTo(map);
+                            
+                            marker.bindPopup(`
+                                <div style="max-width: 200px;">
+                                    <h4 style="margin: 0 0 10px 0; color: ${cor};">
+                                        🚌 Linha ${resultado.onibus.number}
+                                        ${isClosest ? '<br><span style="color: #FF6B6B; font-size: 12px;">📍 PARADA MAIS PRÓXIMA</span>' : ''}
+                                    </h4>
+                                    <p style="margin: 5px 0; font-size: 13px;"><strong>Parada ${j + 1}:</strong></p>
+                                    <p style="margin: 0; font-size: 12px;">${parada}</p>
+                                    ${isClosest ? `
+                                        <div style="margin-top: 10px; padding: 8px; background: #f0f8ff; border-radius: 5px; font-size: 11px;">
+                                            <strong>Distância:</strong> ${resultado.match.distancia < 1 ? 
+                                                Math.round(resultado.match.distancia * 1000) + 'm' : 
+                                                resultado.match.distancia.toFixed(1) + 'km'}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `);
+                            
+                            markers.push(marker);
+                        }
+                        
+                        // Pequeno delay para não sobrecarregar
+                        if (j % 5 === 0) {
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                        }
+                    }
+                    
+                    // Desenha a linha da rota
+                    if (coordenadas.length > 1) {
+                        const polyline = L.polyline(coordenadas, {
+                            color: cor,
+                            weight: 4,
+                            opacity: 0.8,
+                            dashArray: resultado === resultados[0] ? null : '10, 5' // Primeira rota sólida, outras tracejadas
+                        }).addTo(map);
+                        
+                        polyline.bindPopup(`
+                            <div style="text-align: center;">
+                                <h4 style="margin: 0; color: ${cor};">🚌 Linha ${resultado.onibus.number}</h4>
+                                <p style="margin: 5px 0; font-size: 13px;">${resultado.onibus.route}</p>
+                                <p style="margin: 0; font-size: 12px; color: #666;">
+                                    ${coordenadas.length} paradas mapeadas
+                                </p>
+                            </div>
+                        `);
+                    }
+                    
+                } catch (error) {
+                    console.error(`❌ Erro ao processar rota ${resultado.onibus.number}:`, error);
+                }
+            }
+            
+            // Ajusta o zoom para mostrar todas as rotas
+            if (bounds.length > 0) {
+                map.fitBounds(bounds, { padding: [20, 20] });
+            }
+            
+            showToast(`✅ ${Math.min(resultados.length, 5)} rota(s) carregada(s) no mapa!`);
         }
-
+        
+        function fecharMapa() {
+            document.getElementById('mapContainer').style.display = 'none';
+        }
+        
+        function adicionarFavorito(numeroLinha) {
+            let favoritos = dadosMemoria?.favoritos || [];
+            
+            if (!favoritos.includes(numeroLinha)) {
+                favoritos.push(numeroLinha);
+                if (dadosMemoria) {
+                    dadosMemoria.favoritos = favoritos;
+                }
+                
+                // Tenta salvar no localStorage se disponível
+                try {
+                    if (typeof Storage !== 'undefined' && window.localStorage) {
+                        localStorage.setItem('favoritosOnibus', JSON.stringify(favoritos));
+                    }
+                } catch (e) {
+                    console.log('localStorage não disponível para favoritos');
+                }
+                
+                showToast(`⭐ Linha ${numeroLinha} adicionada aos favoritos!`);
+            } else {
+                showToast(`ℹ️ Linha ${numeroLinha} já está nos favoritos`);
+            }
+        }
+        
         function adicionarRota() {
             const numero = document.getElementById('busNumber').value.trim();
             const rota = document.getElementById('busRoute').value.trim();
             const paradas = document.getElementById('busStops').value.trim();
             
             if (!numero || !rota || !paradas) {
-                alert('Preencha todos os campos');
+                showToast('❌ Preencha todos os campos', 'error');
                 return;
             }
             
-            const arrayParadas = paradas.split('\n').map(function(p) { return p.trim(); }).filter(function(p) { return p; });
+            const arrayParadas = paradas.split('\n').map(p => p.trim()).filter(p => p);
             
             if (arrayParadas.length < 2) {
-                alert('Adicione pelo menos 2 endereços');
+                showToast('❌ Adicione pelo menos 2 paradas', 'error');
                 return;
             }
             
-            const existe = rotasOnibus.find(function(r) { return r.number === numero; });
-            if (existe && !confirm('Rota ' + numero + ' já existe. Substituir?')) {
+            const existe = rotasOnibus.find(r => r.number === numero);
+            if (existe && !confirm(`Rota ${numero} já existe. Substituir?`)) {
                 return;
             }
             
             if (existe) {
-                const indice = rotasOnibus.findIndex(function(r) { return r.number === numero; });
+                const indice = rotasOnibus.findIndex(r => r.number === numero);
                 rotasOnibus.splice(indice, 1);
             }
             
@@ -700,124 +1767,320 @@
             
             salvarDados(rotasOnibus);
             
+            // Limpa o formulário
             document.getElementById('busNumber').value = '';
             document.getElementById('busRoute').value = '';
             document.getElementById('busStops').value = '';
             
-            mostrarMensagem('Rota adicionada com sucesso! 💾');
+            // Atualiza dados
+            atualizarEstatisticas();
             atualizarListaRotas();
+            preencherEnderecosConhecidos();
+            
+            showToast(`✅ Rota ${numero} adicionada com sucesso!`);
         }
-
+        
         function importarCSV(event) {
             const arquivo = event.target.files[0];
             if (!arquivo) return;
             
+            processCSVFile(arquivo);
+        }
+        
+        function processCSVFile(arquivo) {
+            if (!arquivo.name.endsWith('.csv')) {
+                showToast('❌ Arquivo deve ser CSV', 'error');
+                return;
+            }
+            
             const reader = new FileReader();
             reader.onload = function(e) {
-                const texto = e.target.result;
-                const linhas = texto.split('\n');
-                let contador = 0;
-                
-                for (let i = 1; i < linhas.length; i++) {
-                    const linha = linhas[i];
-                    if (linha.trim()) {
-                        const partes = linha.split(',');
-                        if (partes.length >= 3) {
-                            const numero = partes[0].trim();
-                            const rota = partes[1].trim();
-                            const paradas = partes.slice(2).map(function(p) { return p.trim(); }).filter(function(p) { return p; });
-                            
-                            if (numero && rota && paradas.length > 0) {
-                                rotasOnibus.push({ number: numero, route: rota, stops: paradas });
-                                contador++;
+                try {
+                    const texto = e.target.result;
+                    const linhas = texto.split('\n');
+                    let contador = 0;
+                    let erros = 0;
+                    
+                    showToast('📁 Processando arquivo CSV...');
+                    
+                    for (let i = 1; i < linhas.length; i++) { // Pula cabeçalho
+                        const linha = linhas[i];
+                        if (linha.trim()) {
+                            try {
+                                const partes = linha.split(',');
+                                if (partes.length >= 3) {
+                                    const numero = partes[0].trim();
+                                    const rota = partes[1].trim();
+                                    const paradas = partes.slice(2).map(p => p.trim()).filter(p => p);
+                                    
+                                    if (numero && rota && paradas.length > 0) {
+                                        // Remove rota existente se houver
+                                        const indiceExistente = rotasOnibus.findIndex(r => r.number === numero);
+                                        if (indiceExistente !== -1) {
+                                            rotasOnibus.splice(indiceExistente, 1);
+                                        }
+                                        
+                                        rotasOnibus.push({ 
+                                            number: numero, 
+                                            route: rota, 
+                                            stops: paradas 
+                                        });
+                                        contador++;
+                                    } else {
+                                        erros++;
+                                    }
+                                } else {
+                                    erros++;
+                                }
+                            } catch (e) {
+                                erros++;
+                                console.warn(`Erro na linha ${i}:`, e);
                             }
                         }
                     }
+                    
+                    salvarDados(rotasOnibus);
+                    atualizarEstatisticas();
+                    atualizarListaRotas();
+                    preencherEnderecosConhecidos();
+                    
+                    if (contador > 0) {
+                        showToast(`✅ ${contador} rota(s) importada(s)! ${erros > 0 ? `(${erros} erro(s))` : ''}`);
+                    } else {
+                        showToast('❌ Nenhuma rota válida encontrada no arquivo', 'error');
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Erro ao processar CSV:', error);
+                    showToast('❌ Erro ao processar arquivo CSV', 'error');
                 }
-                
-                salvarDados(rotasOnibus);
-                atualizarListaRotas();
-                mostrarMensagem(contador + ' rotas importadas! 📁');
             };
             
             reader.readAsText(arquivo);
         }
-
+        
         function excluirRota(indice) {
             const rota = rotasOnibus[indice];
-            if (confirm('Excluir rota ' + rota.number + '?')) {
+            if (confirm(`Excluir rota ${rota.number} - ${rota.route}?`)) {
                 rotasOnibus.splice(indice, 1);
                 salvarDados(rotasOnibus);
+                atualizarEstatisticas();
                 atualizarListaRotas();
-                mostrarMensagem('Rota excluída! 🗑️');
+                preencherEnderecosConhecidos();
+                showToast(`🗑️ Rota ${rota.number} excluída!`);
             }
         }
-
+        
         function exportarBackup() {
-            const dados = JSON.stringify(rotasOnibus, null, 2);
-            const blob = new Blob([dados], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'backup_rotas_' + new Date().toISOString().split('T')[0] + '.json';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            mostrarMensagem('Backup exportado! 📤');
+            try {
+                const dados = {
+                    rotas: rotasOnibus,
+                    timestamp: Date.now(),
+                    total: rotasOnibus.length,
+                    version: '2.0'
+                };
+                
+                const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                
+                a.href = url;
+                a.download = `backup_rotas_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showToast('📤 Backup exportado com sucesso!');
+            } catch (error) {
+                console.error('❌ Erro ao exportar:', error);
+                showToast('❌ Erro ao exportar backup', 'error');
+            }
         }
-
+        
         function limparTudo() {
-            if (confirm('Apagar TODAS as rotas?') && confirm('Confirma exclusão?')) {
+            if (confirm('⚠️ Apagar TODAS as rotas?') && 
+                confirm('⚠️ Esta ação não pode ser desfeita. Confirma exclusão?')) {
+                
                 rotasOnibus = [];
                 salvarDados(rotasOnibus);
+                atualizarEstatisticas();
                 atualizarListaRotas();
-                mostrarMensagem('Dados limpos! 🗑️');
+                preencherEnderecosConhecidos();
+                
+                // Limpa caches
+                coordsCache.clear();
+                enderecosConhecidos.clear();
+                
+                showToast('🗑️ Todos os dados foram limpos!');
             }
         }
-
+        
+        function toggleModoEscuro() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            
+            // Tenta salvar preferência se localStorage disponível
+            try {
+                if (typeof Storage !== 'undefined' && window.localStorage) {
+                    localStorage.setItem('darkMode', isDark);
+                }
+            } catch (e) {
+                console.log('localStorage não disponível para tema');
+            }
+            
+            showToast(isDark ? '🌙 Modo escuro ativado' : '☀️ Modo claro ativado');
+        }
+        
+        function atualizarEstatisticas() {
+            const totalRotas = rotasOnibus.length;
+            const totalParadas = rotasOnibus.reduce((total, rota) => total + rota.stops.length, 0);
+            
+            document.getElementById('totalRoutes').textContent = totalRotas;
+            document.getElementById('totalStops').textContent = totalParadas;
+        }
+        
         function atualizarListaRotas() {
             const lista = document.getElementById('routesList');
             
             if (rotasOnibus.length === 0) {
-                lista.innerHTML = '<p style="color: #666;">Nenhuma rota cadastrada</p>';
+                lista.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #666;">
+                        <h4>📋 Nenhuma rota cadastrada</h4>
+                        <p>Adicione rotas usando o formulário acima ou importe um arquivo CSV</p>
+                    </div>
+                `;
                 return;
             }
             
+            // Ordena rotas por número
+            const rotasOrdenadas = [...rotasOnibus].sort((a, b) => {
+                return parseInt(a.number) - parseInt(b.number);
+            });
+            
             let html = '';
-            for (let i = 0; i < rotasOnibus.length; i++) {
-                const onibus = rotasOnibus[i];
-                const preview = onibus.stops.slice(0, 2).join(' → ') + (onibus.stops.length > 2 ? ' → ...' : '');
+            rotasOrdenadas.forEach((onibus, indiceOriginal) => {
+                const indiceReal = rotasOnibus.findIndex(r => r.number === onibus.number);
+                const preview = onibus.stops.slice(0, 3).join(' → ') + 
+                               (onibus.stops.length > 3 ? ' → ...' : '');
                 
-                html += '<div class="route-item">';
-                html += '<div class="route-number">🚌 Linha ' + onibus.number + '</div>';
-                html += '<div style="font-weight: 600; margin: 5px 0;">' + onibus.route + '</div>';
-                html += '<div class="stops-preview">📍 ' + onibus.stops.length + ' paradas: ' + preview + '</div>';
-                html += '<div class="route-actions">';
-                html += '<a href="javascript:void(0)" onclick="abrirTrajetoRotaCompleta(' + i + ')" class="btn-map">🗺️ Ver Trajeto Completo</a>';
-                html += '<button class="btn-delete" onclick="excluirRota(' + i + ')">🗑️ Excluir</button>';
-                html += '</div>';
-                html += '</div>';
-            }
+                html += `
+                    <div class="route-item">
+                        <div class="route-header">
+                            <div>
+                                <div class="route-number">🚌 Linha ${onibus.number}</div>
+                                <div style="font-weight: 600; margin: 5px 0; color: #333;">${onibus.route}</div>
+                                <div style="font-size: 0.9rem; color: #666; background: #f8f9fa; 
+                                           padding: 8px 12px; border-radius: 8px; margin-top: 8px;">
+                                    📍 ${onibus.stops.length} parada${onibus.stops.length !== 1 ? 's' : ''}: ${preview}
+                                </div>
+                            </div>
+                            <div class="route-actions">
+                                <button class="btn btn-secondary btn-small" 
+                                        onclick="mostrarRotaNoMapa(${indiceReal})" 
+                                        title="Ver no mapa">
+                                    🗺️ Mapa
+                                </button>
+                                <button class="btn btn-secondary btn-small" 
+                                        onclick="editarRota(${indiceReal})" 
+                                        title="Editar rota">
+                                    ✏️ Editar
+                                </button>
+                                <button class="btn btn-secondary btn-small" 
+                                        onclick="excluirRota(${indiceReal})" 
+                                        title="Excluir rota"
+                                        style="background: var(--error);">
+                                    🗑️ Excluir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
             
             lista.innerHTML = html;
         }
-
-        function mostrarMensagem(texto) {
-            const msg = document.getElementById('successMessage');
-            msg.textContent = texto;
-            msg.style.display = 'block';
-            setTimeout(function() {
-                msg.style.display = 'none';
-            }, 3000);
+        
+        function mostrarRotaNoMapa(indice) {
+            const rota = rotasOnibus[indice];
+            if (!rota) return;
+            
+            // Simula um resultado de busca para mostrar no mapa
+            const resultadoSimulado = [{
+                onibus: rota,
+                match: {
+                    score: 1,
+                    tipo: 'completa',
+                    parada: rota.stops[0],
+                    distancia: 0,
+                    coords: null,
+                    indice: 0
+                }
+            }];
+            
+            mostrarNoMapa(resultadoSimulado);
         }
-
-        // Inicialização
-        document.addEventListener('DOMContentLoaded', function() {
-            rotasOnibus = carregarDados();
-            atualizarListaRotas();
-            console.log('🚌 Sistema iniciado com ' + rotasOnibus.length + ' rotas');
-        });
+        
+        function editarRota(indice) {
+            const rota = rotasOnibus[indice];
+            if (!rota) return;
+            
+            document.getElementById('busNumber').value = rota.number;
+            document.getElementById('busRoute').value = rota.route;
+            document.getElementById('busStops').value = rota.stops.join('\n');
+            
+            // Scroll para o formulário
+            document.querySelector('.admin-panel').scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+            
+            showToast(`✏️ Rota ${rota.number} carregada para edição`);
+        }
+        
+        function showToast(message, type = 'success') {
+            // Remove toast existente
+            const existingToast = document.querySelector('.toast');
+            if (existingToast) {
+                existingToast.remove();
+            }
+            
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            // Mostra o toast
+            setTimeout(() => toast.classList.add('show'), 100);
+            
+            // Remove o toast após 4 segundos
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+        
+        // Inicialização do modo escuro
+        try {
+            if (typeof Storage !== 'undefined' && window.localStorage && localStorage.getItem('darkMode') === 'true') {
+                document.body.classList.add('dark-mode');
+            }
+        } catch (e) {
+            console.log('localStorage não disponível para carregar tema');
+        }
+        
+        // Service Worker para cache (opcional)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {
+                console.log('Service Worker não disponível');
+            });
+        }
+        
+        // Detecta conexão
+        window.addEventListener('online', () => showToast('🌐 Conexão restaurada!'));
+        window.addEventListener('offline', () => showToast('📴 Modo offline ativado', 'warning'));
+        
+        console.log('🚀 Sistema de ônibus avançado carregado!');
     </script>
 </body>
 </html>
