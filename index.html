@@ -689,13 +689,11 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
         <div class="header">
             <h1>🚌 Encontre seu Ônibus</h1>
             <p>Sistema inteligente para encontrar a melhor rota de transporte público</p>
         </div>
 
-        <!-- Statistics -->
         <div class="stats-container">
             <div class="stat-card">
                 <div class="stat-number" id="totalRoutes">0</div>
@@ -711,13 +709,10 @@
             </div>
         </div>
 
-        <!-- Main Grid -->
         <div class="main-grid">
-            <!-- Search Panel -->
             <div class="search-panel">
                 <h2 class="panel-title">🔍 Buscar Rota</h2>
                 
-                <!-- Quick Filters -->
                 <div class="quick-filters">
                     <div class="filter-chip" data-filter="all">Todas</div>
                     <div class="filter-chip" data-filter="curitiba">Curitiba</div>
@@ -726,7 +721,6 @@
                     <div class="filter-chip" data-filter="fazenda-rio-grande">Fazenda Rio Grande</div>
                 </div>
                 
-                <!-- Search Form -->
                 <div class="form-group">
                     <label class="form-label" for="userAddress">📍 Seu endereço atual:</label>
                     <div class="autocomplete-container">
@@ -768,7 +762,6 @@
                 </button>
             </div>
 
-            <!-- Admin Panel -->
             <div class="admin-panel">
                 <h2 class="panel-title">⚙️ Gerenciar Rotas</h2>
                 
@@ -785,7 +778,10 @@
                 <div class="form-group">
                     <label class="form-label" for="busStops">📍 Paradas da Rota:</label>
                     <textarea id="busStops" class="form-textarea" rows="4" 
-                              placeholder="Digite uma parada por linha:&#10;Rua A 100 Bairro Cidade&#10;Avenida B 200 Centro&#10;Praça C s/n"></textarea>
+                              placeholder="Digite uma parada por linha:
+Rua A 100 Bairro Cidade
+Avenida B 200 Centro
+Praça C s/n"></textarea>
                 </div>
                 
                 <button class="btn" onclick="adicionarRota()">➕ Adicionar Rota</button>
@@ -805,7 +801,6 @@
             </div>
         </div>
 
-        <!-- Search Results -->
         <div class="results-container" id="searchResults">
             <div class="results-header">
                 <h3 class="results-title">🎯 Resultados da Busca</h3>
@@ -815,7 +810,6 @@
             <div id="busResults"></div>
         </div>
 
-        <!-- Map Container -->
         <div class="map-container" id="mapContainer">
             <div class="results-header">
                 <h3 class="results-title">🗺️ Mapa das Rotas</h3>
@@ -824,14 +818,12 @@
             <div id="map"></div>
         </div>
 
-        <!-- Routes Management -->
         <div class="routes-management">
             <h3 class="panel-title">📋 Rotas Cadastradas</h3>
             <div id="routesList"></div>
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script>
         // Variáveis globais
@@ -1139,8 +1131,7 @@
             const dLat = toRadians(lat2 - lat1);
             const dLon = toRadians(lon2 - lon1);
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * 
-                    Math.sin(dLon/2) * Math.sin(dLon/2);
+                    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return R * c;
         }
@@ -1488,6 +1479,11 @@
                 // Destaca as 3 melhores opções
                 const isTopChoice = index < 3;
                 const borderColor = isTopChoice ? 'rgba(255, 215, 0, 0.8)' : 'rgba(255,255,255,0.3)';
+
+                // *** CORREÇÃO DA URL DO GOOGLE MAPS ***
+                const origem = encodeURIComponent(enderecoUsuario);
+                const destino = encodeURIComponent(resultado.match.parada);
+                const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origem}&destination=${destino}`;
                 
                 html += `
                     <div class="bus-card" style="position: relative; ${isTopChoice ? 'border: 3px solid ' + borderColor + ';' : ''}">
@@ -1546,7 +1542,7 @@
                                class="btn-action btn-map">
                                 🗺️ Ver Trajeto Completo
                             </a>
-                            <a href="https://www.google.com/maps/dir/${encodeURIComponent(enderecoUsuario)}/${encodeURIComponent(resultado.match.parada)}" 
+                            <a href="${mapsUrl}" 
                                target="_blank" class="btn-action btn-route">
                                 🧭 Como Chegar
                             </a>
@@ -1855,10 +1851,6 @@
                 legend.addTo(map);
             }
             
-            showToast(`✅ ${Math.min(resultados.length, 3)} rota(s) mapeada(s) com todas as paradas!`);
-        }
-        }
-        
             showToast(`✅ ${Math.min(resultados.length, 3)} rota(s) mapeada(s) com todas as paradas!`);
         }
         
@@ -2225,363 +2217,6 @@
             }
         } catch (e) {
             console.log('localStorage não disponível para carregar tema');
-        }
-        
-        // Service Worker para cache (opcional)
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {
-                console.log('Service Worker não disponível');
-            });
-        }
-        
-        // Detecta conexão
-        window.addEventListener('online', () => showToast('🌐 Conexão restaurada!'));
-        window.addEventListener('offline', () => showToast('📴 Modo offline ativado', 'warning'));
-        
-        console.log('🚀 Sistema de ônibus avançado carregado!');
-        
-        function adicionarRota() {
-            const numero = document.getElementById('busNumber').value.trim();
-            const rota = document.getElementById('busRoute').value.trim();
-            const paradas = document.getElementById('busStops').value.trim();
-            
-            if (!numero || !rota || !paradas) {
-                showToast('❌ Preencha todos os campos', 'error');
-                return;
-            }
-            
-            const arrayParadas = paradas.split('\n').map(p => p.trim()).filter(p => p);
-            
-            if (arrayParadas.length < 2) {
-                showToast('❌ Adicione pelo menos 2 paradas', 'error');
-                return;
-            }
-            
-            const existe = rotasOnibus.find(r => r.number === numero);
-            if (existe && !confirm(`Rota ${numero} já existe. Substituir?`)) {
-                return;
-            }
-            
-            if (existe) {
-                const indice = rotasOnibus.findIndex(r => r.number === numero);
-                rotasOnibus.splice(indice, 1);
-            }
-            
-            rotasOnibus.push({
-                number: numero,
-                route: rota,
-                stops: arrayParadas
-            });
-            
-            salvarDados(rotasOnibus);
-            
-            // Limpa o formulário
-            document.getElementById('busNumber').value = '';
-            document.getElementById('busRoute').value = '';
-            document.getElementById('busStops').value = '';
-            
-            // Atualiza dados
-            atualizarEstatisticas();
-            atualizarListaRotas();
-            preencherEnderecosConhecidos();
-            
-            showToast(`✅ Rota ${numero} adicionada com sucesso!`);
-        }
-        
-        function importarCSV(event) {
-            const arquivo = event.target.files[0];
-            if (!arquivo) return;
-            
-            processCSVFile(arquivo);
-        }
-        
-        function processCSVFile(arquivo) {
-            if (!arquivo.name.endsWith('.csv')) {
-                showToast('❌ Arquivo deve ser CSV', 'error');
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const texto = e.target.result;
-                    const linhas = texto.split('\n');
-                    let contador = 0;
-                    let erros = 0;
-                    
-                    showToast('📁 Processando arquivo CSV...');
-                    
-                    for (let i = 1; i < linhas.length; i++) { // Pula cabeçalho
-                        const linha = linhas[i];
-                        if (linha.trim()) {
-                            try {
-                                const partes = linha.split(',');
-                                if (partes.length >= 3) {
-                                    const numero = partes[0].trim();
-                                    const rota = partes[1].trim();
-                                    const paradas = partes.slice(2).map(p => p.trim()).filter(p => p);
-                                    
-                                    if (numero && rota && paradas.length > 0) {
-                                        // Remove rota existente se houver
-                                        const indiceExistente = rotasOnibus.findIndex(r => r.number === numero);
-                                        if (indiceExistente !== -1) {
-                                            rotasOnibus.splice(indiceExistente, 1);
-                                        }
-                                        
-                                        rotasOnibus.push({ 
-                                            number: numero, 
-                                            route: rota, 
-                                            stops: paradas 
-                                        });
-                                        contador++;
-                                    } else {
-                                        erros++;
-                                    }
-                                } else {
-                                    erros++;
-                                }
-                            } catch (e) {
-                                erros++;
-                                console.warn(`Erro na linha ${i}:`, e);
-                            }
-                        }
-                    }
-                    
-                    salvarDados(rotasOnibus);
-                    atualizarEstatisticas();
-                    atualizarListaRotas();
-                    preencherEnderecosConhecidos();
-                    
-                    if (contador > 0) {
-                        showToast(`✅ ${contador} rota(s) importada(s)! ${erros > 0 ? `(${erros} erro(s))` : ''}`);
-                    } else {
-                        showToast('❌ Nenhuma rota válida encontrada no arquivo', 'error');
-                    }
-                    
-                } catch (error) {
-                    console.error('❌ Erro ao processar CSV:', error);
-                    showToast('❌ Erro ao processar arquivo CSV', 'error');
-                }
-            };
-            
-            reader.readAsText(arquivo);
-        }
-        
-        function excluirRota(indice) {
-            const rota = rotasOnibus[indice];
-            if (confirm(`Excluir rota ${rota.number} - ${rota.route}?`)) {
-                rotasOnibus.splice(indice, 1);
-                salvarDados(rotasOnibus);
-                atualizarEstatisticas();
-                atualizarListaRotas();
-                preencherEnderecosConhecidos();
-                showToast(`🗑️ Rota ${rota.number} excluída!`);
-            }
-        }
-        
-        function exportarBackup() {
-            try {
-                const dados = {
-                    rotas: rotasOnibus,
-                    timestamp: Date.now(),
-                    total: rotasOnibus.length,
-                    version: '2.0'
-                };
-                
-                const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                
-                a.href = url;
-                a.download = `backup_rotas_${new Date().toISOString().split('T')[0]}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                showToast('📤 Backup exportado com sucesso!');
-            } catch (error) {
-                console.error('❌ Erro ao exportar:', error);
-                showToast('❌ Erro ao exportar backup', 'error');
-            }
-        }
-        
-        function limparTudo() {
-            if (confirm('⚠️ Apagar TODAS as rotas?') && 
-                confirm('⚠️ Esta ação não pode ser desfeita. Confirma exclusão?')) {
-                
-                rotasOnibus = [];
-                salvarDados(rotasOnibus);
-                atualizarEstatisticas();
-                atualizarListaRotas();
-                preencherEnderecosConhecidos();
-                
-                // Limpa caches
-                coordsCache.clear();
-                enderecosConhecidos.clear();
-                
-                showToast('🗑️ Todos os dados foram limpos!');
-            }
-        }
-        
-        function toggleModoEscuro() {
-            document.body.classList.toggle('dark-mode');
-            const isDark = document.body.classList.contains('dark-mode');
-            
-            // Tenta salvar preferência se localStorage disponível
-            try {
-                if (typeof Storage !== 'undefined' && window.localStorage) {
-                    localStorage.setItem('darkMode', isDark);
-                }
-            } catch (e) {
-                console.log('localStorage não disponível para tema');
-            }
-            
-            showToast(isDark ? '🌙 Modo escuro ativado' : '☀️ Modo claro ativado');
-        }
-        
-        function atualizarEstatisticas() {
-            const totalRotas = rotasOnibus.length;
-            const totalParadas = rotasOnibus.reduce((total, rota) => total + rota.stops.length, 0);
-            
-            document.getElementById('totalRoutes').textContent = totalRotas;
-            document.getElementById('totalStops').textContent = totalParadas;
-        }
-        
-        function atualizarListaRotas() {
-            const lista = document.getElementById('routesList');
-            
-            if (rotasOnibus.length === 0) {
-                lista.innerHTML = `
-                    <div style="text-align: center; padding: 40px; color: #666;">
-                        <h4>📋 Nenhuma rota cadastrada</h4>
-                        <p>Adicione rotas usando o formulário acima ou importe um arquivo CSV</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            // Ordena rotas por número
-            const rotasOrdenadas = [...rotasOnibus].sort((a, b) => {
-                return parseInt(a.number) - parseInt(b.number);
-            });
-            
-            let html = '';
-            rotasOrdenadas.forEach((onibus, indiceOriginal) => {
-                const indiceReal = rotasOnibus.findIndex(r => r.number === onibus.number);
-                const preview = onibus.stops.slice(0, 3).join(' → ') + 
-                               (onibus.stops.length > 3 ? ' → ...' : '');
-                
-                html += `
-                    <div class="route-item">
-                        <div class="route-header">
-                            <div>
-                                <div class="route-number">🚌 Linha ${onibus.number}</div>
-                                <div style="font-weight: 600; margin: 5px 0; color: #333;">${onibus.route}</div>
-                                <div style="font-size: 0.9rem; color: #666; background: #f8f9fa; 
-                                           padding: 8px 12px; border-radius: 8px; margin-top: 8px;">
-                                    📍 ${onibus.stops.length} parada${onibus.stops.length !== 1 ? 's' : ''}: ${preview}
-                                </div>
-                            </div>
-                            <div class="route-actions">
-                                <button class="btn btn-secondary btn-small" 
-                                        onclick="mostrarRotaNoMapa(${indiceReal})" 
-                                        title="Ver no mapa">
-                                    🗺️ Mapa
-                                </button>
-                                <button class="btn btn-secondary btn-small" 
-                                        onclick="editarRota(${indiceReal})" 
-                                        title="Editar rota">
-                                    ✏️ Editar
-                                </button>
-                                <button class="btn btn-secondary btn-small" 
-                                        onclick="excluirRota(${indiceReal})" 
-                                        title="Excluir rota"
-                                        style="background: var(--error);">
-                                    🗑️ Excluir
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            lista.innerHTML = html;
-        }
-        
-        function mostrarRotaNoMapa(indice) {
-            const rota = rotasOnibus[indice];
-            if (!rota) return;
-            
-            // Simula um resultado de busca para mostrar no mapa
-            const resultadoSimulado = [{
-                onibus: rota,
-                match: {
-                    score: 1,
-                    tipo: 'completa',
-                    parada: rota.stops[0],
-                    distancia: 0,
-                    coords: null,
-                    indice: 0
-                }
-            }];
-            
-            mostrarNoMapa(resultadoSimulado);
-        }
-        
-        function editarRota(indice) {
-            const rota = rotasOnibus[indice];
-            if (!rota) return;
-            
-            document.getElementById('busNumber').value = rota.number;
-            document.getElementById('busRoute').value = rota.route;
-            document.getElementById('busStops').value = rota.stops.join('\n');
-            
-            // Scroll para o formulário
-            document.querySelector('.admin-panel').scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'center' 
-            });
-            
-            showToast(`✏️ Rota ${rota.number} carregada para edição`);
-        }
-        
-        function showToast(message, type = 'success') {
-            // Remove toast existente
-            const existingToast = document.querySelector('.toast');
-            if (existingToast) {
-                existingToast.remove();
-            }
-            
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            
-            // Mostra o toast
-            setTimeout(() => toast.classList.add('show'), 100);
-            
-            // Remove o toast após 4 segundos
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
-        }
-        
-        // Inicialização do modo escuro
-        try {
-            if (typeof Storage !== 'undefined' && window.localStorage && localStorage.getItem('darkMode') === 'true') {
-                document.body.classList.add('dark-mode');
-            }
-        } catch (e) {
-            console.log('localStorage não disponível para carregar tema');
-        }
-        
-        // Service Worker para cache (opcional)
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {
-                console.log('Service Worker não disponível');
-            });
         }
         
         // Detecta conexão
