@@ -1266,7 +1266,7 @@
             }
         }
         
-        // Busca principal otimizada
+        // Busca principal otimizada com filtro de distância
         async function buscarOnibus() {
             const enderecoUsuario = document.getElementById('userAddress').value.trim();
             const destino = document.getElementById('destination').value.trim();
@@ -1301,8 +1301,8 @@
                 
                 const resultados = [];
                 
-                // Busca paralela para melhor performance
-                const promises = rotasOnibus.map(async (onibus) => {
+                // Busca sequencial para melhor controle
+                for (const onibus of rotasOnibus) {
                     let melhorMatch = {
                         score: 0,
                         tipo: '',
@@ -1312,26 +1312,29 @@
                         indice: -1
                     };
                     
-                    // Busca paralela nas paradas
-                    const paradaPromises = onibus.stops.map(async (parada, j) => {
+                    // Verifica cada parada da linha
+                    for (let j = 0; j < onibus.stops.length; j++) {
+                        const parada = onibus.stops[j];
                         const scoreTexto = calcularSimilaridade(enderecoUsuario, parada);
                         
+                        // Busca coordenadas da parada
+                        const coordsParada = await buscarCoordenadas(parada);
                         let distancia = Infinity;
-                        let coordsParada = null;
                         
-                        if (scoreTexto > 0.3) { // Só busca coordenadas se tem chance
-                            coordsParada = await buscarCoordenadas(parada);
-                            if (coordsParada) {
-                                distancia = calcularDistancia(
-                                    coordsUsuario.lat, coordsUsuario.lng,
-                                    coordsParada.lat, coordsParada.lng
-                                );
-                            }
+                        if (coordsParada && coordsUsuario) {
+                            distancia = calcularDistancia(
+                                coordsUsuario.lat, coordsUsuario.lng,
+                                coordsParada.lat, coordsParada.lng
+                            );
                         }
                         
-                        const scoreProximidade = distancia <= maxDistancia ? 
-                            Math.max(0, (maxDistancia - distancia) / maxDistancia) : 0;
+                        // Calcula score de proximidade
+                        let scoreProximidade = 0;
+                        if (distancia !== Infinity && distancia <= maxDistancia) {
+                            scoreProximidade = Math.max(0, (maxDistancia - distancia) / maxDistancia);
+                        }
                         
+                        // Score combinado
                         const scoreCombinado = (scoreTexto * 0.6) + (scoreProximidade * 0.4);
                         
                         // Bonus para correspondência de destino
@@ -1343,69 +1346,65 @@
                         
                         const scoreTotal = scoreCombinado + bonusDestino;
                         
-                        return {
-                            score: scoreTotal,
-                            scoreTexto,
-                            distancia,
-                            parada,
-                            coords: coordsParada,
-                            indice: j
-                        };
-                    });
-                    
-                    const resultadosParadas = await Promise.all(paradaPromises);
-                    
-                    // Encontra a melhor parada
-                    resultadosParadas.forEach(resultado => {
-                        if ((resultado.score > melhorMatch.score) || 
-                            (resultado.score === melhorMatch.score && resultado.distancia < melhorMatch.distancia)) {
+                        // Atualiza melhor match se necessário
+                        if ((scoreTotal > melhorMatch.score) || 
+                            (scoreTotal === melhorMatch.score && distancia < melhorMatch.distancia)) {
                             
                             melhorMatch = {
-                                score: resultado.score,
-                                tipo: resultado.scoreTexto > 0.7 ? 'exato' : 
-                                      resultado.distancia <= 0.5 ? 'muito-proximo' :
-                                      resultado.distancia <= 1 ? 'proximo' : 'distante',
-                                parada: resultado.parada,
-                                distancia: resultado.distancia,
-                                coords: resultado.coords,
-                                indice: resultado.indice
+                                score: scoreTotal,
+                                tipo: scoreTexto > 0.7 ? 'exato' : 
+                                      distancia <= 0.5 ? 'muito-proximo' :
+                                      distancia <= 1 ? 'proximo' : 'distante',
+                                parada: parada,
+                                distancia: distancia,
+                                coords: coordsParada,
+                                indice: j
                             };
                         }
-                    });
+                        
+                        // Pequeno delay para não sobrecarregar
+                        if (j % 3 === 0) {
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                        }
+                    }
                     
-                    return { onibus, melhorMatch };
-                });
-                
-                const resultadosOnibus = await Promise.all(promises);
-                
-                // Filtra e ordena resultados
-                resultadosOnibus.forEach(({ onibus, melhorMatch }) => {
-                    if (melhorMatch.score > 0.2 || melhorMatch.distancia <= maxDistancia) {
+                    // FILTRO CRÍTICO: Só adiciona se passou nos critérios de distância
+                    const passouNoFiltro = (
+                        melhorMatch.score > 0.3 || // Score mínimo
+                        melhorMatch.distancia <= maxDistancia // Dentro da distância máxima
+                    );
+                    
+                    if (passouNoFiltro && melhorMatch.distancia !== Infinity) {
                         resultados.push({
                             onibus: onibus,
                             match: melhorMatch,
                             coordsUsuario: coordsUsuario
                         });
                     }
+                }
+                
+                // Ordenação por prioridade: distância primeiro, depois score
+                resultados.sort((a, b) => {
+                    // Prioriza distâncias menores
+                    const diffDistancia = a.match.distancia - b.match.distancia;
+                    if (Math.abs(diffDistancia) > 0.1) {
+                        return diffDistancia;
+                    }
+                    // Em caso de distâncias similares, prioriza score
+                    return b.match.score - a.match.score;
                 });
                 
-                // Ordenação inteligente
-                resultados.sort((a, b) => {
-                    // Prioriza score alto
-                    if (Math.abs(b.match.score - a.match.score) > 0.1) {
-                        return b.match.score - a.match.score;
-                    }
-                    // Em caso de empate, prioriza distância
-                    return a.match.distancia - b.match.distancia;
-                });
+                // Limita resultados para os mais relevantes
+                const resultadosLimitados = resultados.slice(0, 10);
                 
                 resultadosBusca = {
-                    resultados: resultados,
+                    resultados: resultadosLimitados,
                     coordsUsuario: coordsUsuario,
-                    enderecoUsuario: enderecoUsuario
+                    enderecoUsuario: enderecoUsuario,
+                    maxDistancia: maxDistancia
                 };
                 
-                exibirResultados(resultados, enderecoUsuario);
+                exibirResultados(resultadosLimitados, enderecoUsuario, maxDistancia);
                 
             } catch (error) {
                 console.error('❌ Erro na busca:', error);
@@ -1418,26 +1417,31 @@
             }
         }
         
-        function exibirResultados(resultados, enderecoUsuario) {
+        function exibirResultados(resultados, enderecoUsuario, maxDistancia) {
             const busResults = document.getElementById('busResults');
             const resultsCount = document.getElementById('resultsCount');
             
-            resultsCount.textContent = `${resultados.length} rota${resultados.length !== 1 ? 's' : ''} encontrada${resultados.length !== 1 ? 's' : ''}`;
+            resultsCount.textContent = `${resultados.length} rota${resultados.length !== 1 ? 's' : ''} encontrada${resultados.length !== 1 ? 's' : ''} (máx: ${maxDistancia}km)`;
             
             if (resultados.length === 0) {
                 busResults.innerHTML = `
                     <div style="text-align: center; padding: 40px; color: #666;">
                         <h3>😔 Nenhuma rota encontrada</h3>
-                        <p>Não encontramos rotas próximas ao endereço:</p>
+                        <p>Não encontramos rotas dentro de <strong>${maxDistancia}km</strong> do endereço:</p>
                         <p><strong>${enderecoUsuario}</strong></p>
                         <br>
                         <p>💡 <strong>Dicas:</strong></p>
                         <ul style="text-align: left; display: inline-block;">
-                            <li>Tente usar um endereço mais específico</li>
-                            <li>Verifique se digitou corretamente</li>
-                            <li>Use as sugestões de endereços</li>
-                            <li>Aumente a distância máxima</li>
+                            <li>Aumente a distância máxima para ${maxDistancia < 5 ? maxDistancia + 1 : 10}km</li>
+                            <li>Tente um endereço mais específico</li>
+                            <li>Use as sugestões de autocomplete</li>
+                            <li>Verifique se o endereço está correto</li>
                         </ul>
+                        <div style="margin-top: 20px;">
+                            <button class="btn btn-secondary" onclick="document.getElementById('maxDistance').value='5'; buscarOnibus();">
+                                🔍 Buscar até 5km
+                            </button>
+                        </div>
                     </div>
                 `;
                 return;
@@ -1448,15 +1452,15 @@
                            padding: 20px; border-radius: 15px; margin-bottom: 25px; 
                            border-left: 5px solid #4CAF50;">
                     <h4 style="margin: 0 0 10px 0; color: #2e7d32; display: flex; align-items: center; gap: 10px;">
-                        📍 <span>Busca realizada com sucesso!</span>
+                        🎯 <span>Busca realizada com sucesso!</span>
                     </h4>
                     <p style="margin: 0; font-weight: 600; font-size: 1.1rem;">${enderecoUsuario}</p>
                     <div style="margin-top: 15px; display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
                         <small style="color: #666; background: white; padding: 8px 12px; border-radius: 20px; font-weight: 500;">
-                            ✅ ${resultados.length} linha${resultados.length !== 1 ? 's' : ''} encontrada${resultados.length !== 1 ? 's' : ''}
+                            ✅ ${resultados.length} linha${resultados.length !== 1 ? 's' : ''} dentro de ${maxDistancia}km
                         </small>
                         <small style="color: #666; background: white; padding: 8px 12px; border-radius: 20px; font-weight: 500;">
-                            🎯 Ordenado por relevância
+                            📍 Ordenado por distância
                         </small>
                     </div>
                 </div>
@@ -1481,15 +1485,29 @@
                 
                 const relevancia = Math.round(resultado.match.score * 100);
                 
+                // Destaca as 3 melhores opções
+                const isTopChoice = index < 3;
+                const borderColor = isTopChoice ? 'rgba(255, 215, 0, 0.8)' : 'rgba(255,255,255,0.3)';
+                
                 html += `
-                    <div class="bus-card" style="position: relative;">
+                    <div class="bus-card" style="position: relative; ${isTopChoice ? 'border: 3px solid ' + borderColor + ';' : ''}">
+                        ${isTopChoice ? `
+                            <div style="position: absolute; top: -10px; left: 20px; 
+                                        background: linear-gradient(45deg, #FFD700, #FFA500); 
+                                        color: #333; padding: 5px 15px; border-radius: 15px; 
+                                        font-size: 12px; font-weight: 700; 
+                                        box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                                ${index === 0 ? '🥇 MELHOR OPÇÃO' : index === 1 ? '🥈 2ª OPÇÃO' : '🥉 3ª OPÇÃO'}
+                            </div>
+                        ` : ''}
+                        
                         <div style="position: absolute; top: 15px; right: 15px; 
                                     background: rgba(255,255,255,0.2); padding: 5px 10px; 
                                     border-radius: 10px; font-size: 12px; font-weight: 600;">
                             #${index + 1}
                         </div>
                         
-                        <div class="bus-header">
+                        <div class="bus-header" style="margin-top: ${isTopChoice ? '15px' : '0'};">
                             <div>
                                 <div class="bus-number">🚌 Linha ${resultado.onibus.number}</div>
                                 <div class="bus-route">${resultado.onibus.route}</div>
@@ -1498,7 +1516,9 @@
                                 <div class="status-badge ${status.classe}">
                                     ${status.icone} ${status.texto}
                                 </div>
-                                <div class="distance-badge">${textoDistancia}</div>
+                                <div class="distance-badge" style="font-size: 14px; font-weight: 700;">
+                                    📏 ${textoDistancia}
+                                </div>
                                 <div style="background: rgba(255,255,255,0.2); padding: 4px 8px; 
                                            border-radius: 10px; font-size: 11px;">
                                     ${relevancia}% relevante
@@ -1514,9 +1534,10 @@
                                        border-radius: 8px; font-size: 0.9rem;">
                                 ${resultado.match.parada}
                             </div>
-                            <div style="margin-top: 10px; font-size: 0.8rem; opacity: 0.9;">
-                                📊 Total de paradas: ${resultado.onibus.stops.length} | 
-                                🎯 Parada nº ${resultado.match.indice + 1}
+                            <div style="margin-top: 10px; font-size: 0.8rem; opacity: 0.9; display: flex; gap: 15px; flex-wrap: wrap;">
+                                <span>📊 Total: ${resultado.onibus.stops.length} paradas</span>
+                                <span>🎯 Posição: ${resultado.match.indice + 1}ª parada</span>
+                                <span>⏱️ ~${Math.round(resultado.match.distancia * 12)} min a pé</span>
                             </div>
                         </div>
                         
@@ -1584,124 +1605,261 @@
             
             // Adiciona marcador do usuário
             if (resultadosBusca?.coordsUsuario) {
-                const userMarker = L.marker([resultadosBusca.coordsUsuario.lat, resultadosBusca.coordsUsuario.lng])
-                    .addTo(map)
-                    .bindPopup(`
-                        <div style="text-align: center; font-weight: bold;">
-                            📍 Sua Localização<br>
-                            <small>${resultadosBusca.enderecoUsuario}</small>
+                const userIcon = L.divIcon({
+                    className: 'user-marker',
+                    html: `
+                        <div style="
+                            background: #FF1744; 
+                            color: white; 
+                            border-radius: 50%; 
+                            width: 35px; 
+                            height: 35px; 
+                            display: flex; 
+                            align-items: center; 
+                            justify-content: center; 
+                            font-size: 18px; 
+                            font-weight: bold;
+                            border: 4px solid white;
+                            box-shadow: 0 4px 15px rgba(255,23,68,0.4);
+                            position: relative;
+                        ">
+                            📍
                         </div>
-                    `);
+                    `,
+                    iconSize: [35, 35],
+                    iconAnchor: [17.5, 17.5]
+                });
+                
+                const userMarker = L.marker([resultadosBusca.coordsUsuario.lat, resultadosBusca.coordsUsuario.lng], {
+                    icon: userIcon
+                }).addTo(map).bindPopup(`
+                    <div style="text-align: center; font-weight: bold; max-width: 200px;">
+                        <h4 style="margin: 0 0 10px 0; color: #FF1744;">📍 Sua Localização</h4>
+                        <p style="margin: 0; font-size: 12px;">${resultadosBusca.enderecoUsuario}</p>
+                        <div style="margin-top: 10px; padding: 8px; background: #f0f8ff; border-radius: 5px; font-size: 11px;">
+                            🔍 Buscando ônibus em um raio de ${resultadosBusca.maxDistancia || 3}km
+                        </div>
+                    </div>
+                `);
                 bounds.push([resultadosBusca.coordsUsuario.lat, resultadosBusca.coordsUsuario.lng]);
             }
             
-            // Processa cada rota
-            for (let i = 0; i < Math.min(resultados.length, 5); i++) { // Limita a 5 rotas para performance
+            showToast('🗺️ Carregando rotas no mapa... Aguarde!');
+            
+            // Processa cada rota selecionada
+            for (let i = 0; i < Math.min(resultados.length, 3); i++) { // Máximo 3 rotas para performance
                 const resultado = resultados[i];
                 const cor = cores[i % cores.length];
                 
                 try {
-                    showToast(`🗺️ Carregando rota ${resultado.onibus.number}...`);
+                    showToast(`🚌 Mapeando linha ${resultado.onibus.number}... (${i + 1}/${Math.min(resultados.length, 3)})`);
                     
                     const coordenadas = [];
-                    const markers = [];
+                    const todasParadas = resultado.onibus.stops;
                     
-                    // Busca coordenadas de todas as paradas
-                    for (let j = 0; j < resultado.onibus.stops.length; j++) {
-                        const parada = resultado.onibus.stops[j];
-                        const coords = await buscarCoordenadas(parada);
+                    // Busca coordenadas de TODAS as paradas da linha
+                    for (let j = 0; j < todasParadas.length; j++) {
+                        const parada = todasParadas[j];
                         
-                        if (coords) {
-                            coordenadas.push([coords.lat, coords.lng]);
-                            bounds.push([coords.lat, coords.lng]);
+                        try {
+                            const coords = await buscarCoordenadas(parada);
                             
-                            // Destaca a parada mais próxima
-                            const isClosest = j === resultado.match.indice;
-                            
-                            const marker = L.marker([coords.lat, coords.lng], {
-                                icon: L.divIcon({
+                            if (coords) {
+                                coordenadas.push([coords.lat, coords.lng]);
+                                bounds.push([coords.lat, coords.lng]);
+                                
+                                // Destaca a parada mais próxima do usuário
+                                const isClosest = j === resultado.match.indice;
+                                
+                                // Calcula distância desta parada ao usuário (se tiver coordenadas do usuário)
+                                let distanciaAoUsuario = '';
+                                if (resultadosBusca?.coordsUsuario) {
+                                    const dist = calcularDistancia(
+                                        resultadosBusca.coordsUsuario.lat, 
+                                        resultadosBusca.coordsUsuario.lng,
+                                        coords.lat, 
+                                        coords.lng
+                                    );
+                                    distanciaAoUsuario = dist < 1 ? `${Math.round(dist * 1000)}m` : `${dist.toFixed(1)}km`;
+                                }
+                                
+                                // Ícone personalizado para cada parada
+                                const markerIcon = L.divIcon({
                                     className: 'custom-marker',
                                     html: `
                                         <div style="
-                                            background: ${isClosest ? '#FF6B6B' : cor}; 
+                                            background: ${isClosest ? '#FF1744' : cor}; 
                                             color: white; 
                                             border-radius: 50%; 
-                                            width: ${isClosest ? '30px' : '24px'}; 
-                                            height: ${isClosest ? '30px' : '24px'}; 
+                                            width: ${isClosest ? '32px' : '26px'}; 
+                                            height: ${isClosest ? '32px' : '26px'}; 
                                             display: flex; 
                                             align-items: center; 
                                             justify-content: center; 
-                                            font-size: ${isClosest ? '14px' : '12px'}; 
+                                            font-size: ${isClosest ? '16px' : '11px'}; 
                                             font-weight: bold;
-                                            border: ${isClosest ? '3px solid white' : '2px solid white'};
-                                            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                                            border: ${isClosest ? '4px solid white' : '3px solid white'};
+                                            box-shadow: 0 3px 12px rgba(0,0,0,0.3);
+                                            position: relative;
                                         ">
                                             ${isClosest ? '🎯' : (j + 1)}
                                         </div>
+                                        ${isClosest ? `
+                                            <div style="
+                                                position: absolute;
+                                                top: -8px;
+                                                right: -8px;
+                                                background: #FFD700;
+                                                color: #333;
+                                                border-radius: 50%;
+                                                width: 20px;
+                                                height: 20px;
+                                                display: flex;
+                                                align-items: center;
+                                                justify-content: center;
+                                                font-size: 10px;
+                                                font-weight: bold;
+                                                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                                            ">
+                                                ⭐
+                                            </div>
+                                        ` : ''}
                                     `,
-                                    iconSize: [isClosest ? 30 : 24, isClosest ? 30 : 24],
-                                    iconAnchor: [isClosest ? 15 : 12, isClosest ? 15 : 12]
-                                })
-                            }).addTo(map);
-                            
-                            marker.bindPopup(`
-                                <div style="max-width: 200px;">
-                                    <h4 style="margin: 0 0 10px 0; color: ${cor};">
-                                        🚌 Linha ${resultado.onibus.number}
-                                        ${isClosest ? '<br><span style="color: #FF6B6B; font-size: 12px;">📍 PARADA MAIS PRÓXIMA</span>' : ''}
-                                    </h4>
-                                    <p style="margin: 5px 0; font-size: 13px;"><strong>Parada ${j + 1}:</strong></p>
-                                    <p style="margin: 0; font-size: 12px;">${parada}</p>
-                                    ${isClosest ? `
-                                        <div style="margin-top: 10px; padding: 8px; background: #f0f8ff; border-radius: 5px; font-size: 11px;">
-                                            <strong>Distância:</strong> ${resultado.match.distancia < 1 ? 
-                                                Math.round(resultado.match.distancia * 1000) + 'm' : 
-                                                resultado.match.distancia.toFixed(1) + 'km'}
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            `);
-                            
-                            markers.push(marker);
+                                    iconSize: [isClosest ? 32 : 26, isClosest ? 32 : 26],
+                                    iconAnchor: [isClosest ? 16 : 13, isClosest ? 16 : 13]
+                                });
+                                
+                                const marker = L.marker([coords.lat, coords.lng], {
+                                    icon: markerIcon
+                                }).addTo(map);
+                                
+                                // Popup informativo para cada parada
+                                marker.bindPopup(`
+                                    <div style="max-width: 250px;">
+                                        <h4 style="margin: 0 0 10px 0; color: ${cor}; display: flex; align-items: center; gap: 8px;">
+                                            🚌 <span>Linha ${resultado.onibus.number}</span>
+                                            ${isClosest ? '<span style="background: #FF1744; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px;">MAIS PRÓXIMA</span>' : ''}
+                                        </h4>
+                                        <p style="margin: 5px 0; font-size: 13px; font-weight: 600;">
+                                            <strong>Parada ${j + 1} de ${todasParadas.length}:</strong>
+                                        </p>
+                                        <p style="margin: 0 0 10px 0; font-size: 12px; color: #333;">
+                                            ${parada}
+                                        </p>
+                                        ${distanciaAoUsuario ? `
+                                            <div style="
+                                                margin-top: 10px; 
+                                                padding: 8px; 
+                                                background: ${isClosest ? '#ffebee' : '#f0f8ff'}; 
+                                                border-radius: 5px; 
+                                                font-size: 11px;
+                                                border-left: 3px solid ${isClosest ? '#FF1744' : cor};
+                                            ">
+                                                <strong>📏 Distância de você:</strong> ${distanciaAoUsuario}<br>
+                                                <strong>⏱️ Caminhada:</strong> ~${Math.round(parseFloat(distanciaAoUsuario) * 12)} min
+                                            </div>
+                                        ` : ''}
+                                        ${isClosest ? `
+                                            <div style="
+                                                margin-top: 10px; 
+                                                padding: 8px; 
+                                                background: #e8f5e9; 
+                                                border-radius: 5px; 
+                                                font-size: 11px;
+                                                text-align: center;
+                                                border: 2px solid #4CAF50;
+                                            ">
+                                                🎯 <strong>Esta é sua melhor opção!</strong>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                `);
+                            }
+                        } catch (error) {
+                            console.warn(`Erro ao geocodificar parada ${j + 1}: ${parada}`, error);
                         }
                         
-                        // Pequeno delay para não sobrecarregar
-                        if (j % 5 === 0) {
-                            await new Promise(resolve => setTimeout(resolve, 50));
+                        // Delay pequeno para não sobrecarregar a API
+                        if (j % 2 === 0) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
                         }
                     }
                     
-                    // Desenha a linha da rota
+                    // Desenha a linha conectando todas as paradas
                     if (coordenadas.length > 1) {
                         const polyline = L.polyline(coordenadas, {
                             color: cor,
-                            weight: 4,
+                            weight: i === 0 ? 6 : 4, // Primeira rota mais grossa
                             opacity: 0.8,
-                            dashArray: resultado === resultados[0] ? null : '10, 5' // Primeira rota sólida, outras tracejadas
+                            dashArray: i === 0 ? null : '8, 4', // Primeira rota sólida, outras tracejadas
+                            lineCap: 'round',
+                            lineJoin: 'round'
                         }).addTo(map);
                         
+                        // Popup da linha
                         polyline.bindPopup(`
-                            <div style="text-align: center;">
-                                <h4 style="margin: 0; color: ${cor};">🚌 Linha ${resultado.onibus.number}</h4>
-                                <p style="margin: 5px 0; font-size: 13px;">${resultado.onibus.route}</p>
-                                <p style="margin: 0; font-size: 12px; color: #666;">
-                                    ${coordenadas.length} paradas mapeadas
-                                </p>
+                            <div style="text-align: center; max-width: 200px;">
+                                <h4 style="margin: 0 0 10px 0; color: ${cor}; display: flex; align-items: center; gap: 8px; justify-content: center;">
+                                    🚌 <span>Linha ${resultado.onibus.number}</span>
+                                    ${i === 0 ? '<span style="background: #FFD700; color: #333; padding: 2px 6px; border-radius: 10px; font-size: 10px;">MELHOR</span>' : ''}
+                                </h4>
+                                <p style="margin: 5px 0; font-size: 13px; font-weight: 600;">${resultado.onibus.route}</p>
+                                <div style="margin-top: 10px; display: flex; justify-content: space-between; font-size: 11px; background: #f8f9fa; padding: 8px; border-radius: 5px;">
+                                    <span><strong>📍 Paradas:</strong> ${coordenadas.length}</span>
+                                    <span><strong>📏 Distância:</strong> ${resultado.match.distancia < 1 ? Math.round(resultado.match.distancia * 1000) + 'm' : resultado.match.distancia.toFixed(1) + 'km'}</span>
+                                </div>
                             </div>
                         `);
                     }
                     
                 } catch (error) {
                     console.error(`❌ Erro ao processar rota ${resultado.onibus.number}:`, error);
+                    showToast(`⚠️ Erro ao carregar linha ${resultado.onibus.number}`, 'error');
                 }
             }
             
-            // Ajusta o zoom para mostrar todas as rotas
+            // Ajusta o zoom para mostrar todas as paradas
             if (bounds.length > 0) {
-                map.fitBounds(bounds, { padding: [20, 20] });
+                map.fitBounds(bounds, { 
+                    padding: [30, 30],
+                    maxZoom: 15 
+                });
             }
             
-            showToast(`✅ ${Math.min(resultados.length, 5)} rota(s) carregada(s) no mapa!`);
+            // Adiciona legenda no mapa
+            if (resultados.length > 1) {
+                const legend = L.control({ position: 'bottomright' });
+                legend.onAdd = function () {
+                    const div = L.DomUtil.create('div', 'legend');
+                    div.style.background = 'rgba(255,255,255,0.9)';
+                    div.style.padding = '10px';
+                    div.style.borderRadius = '5px';
+                    div.style.fontSize = '12px';
+                    div.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+                    
+                    let legendHtml = '<h4 style="margin: 0 0 8px 0;">📋 Legenda:</h4>';
+                    for (let i = 0; i < Math.min(resultados.length, 3); i++) {
+                        const cor = cores[i % cores.length];
+                        const resultado = resultados[i];
+                        legendHtml += `
+                            <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
+                                <div style="width: 20px; height: 4px; background: ${cor}; border-radius: 2px;"></div>
+                                <span>Linha ${resultado.onibus.number}</span>
+                            </div>
+                        `;
+                    }
+                    legendHtml += '<div style="margin-top: 8px; font-size: 10px; color: #666;">🎯 = Parada mais próxima</div>';
+                    div.innerHTML = legendHtml;
+                    return div;
+                };
+                legend.addTo(map);
+            }
+            
+            showToast(`✅ ${Math.min(resultados.length, 3)} rota(s) mapeada(s) com todas as paradas!`);
+        }
+        }
+        
+            showToast(`✅ ${Math.min(resultados.length, 3)} rota(s) mapeada(s) com todas as paradas!`);
         }
         
         function fecharMapa() {
@@ -1731,6 +1889,356 @@
                 showToast(`ℹ️ Linha ${numeroLinha} já está nos favoritos`);
             }
         }
+        
+        function adicionarRota() {
+            const numero = document.getElementById('busNumber').value.trim();
+            const rota = document.getElementById('busRoute').value.trim();
+            const paradas = document.getElementById('busStops').value.trim();
+            
+            if (!numero || !rota || !paradas) {
+                showToast('❌ Preencha todos os campos', 'error');
+                return;
+            }
+            
+            const arrayParadas = paradas.split('\n').map(p => p.trim()).filter(p => p);
+            
+            if (arrayParadas.length < 2) {
+                showToast('❌ Adicione pelo menos 2 paradas', 'error');
+                return;
+            }
+            
+            const existe = rotasOnibus.find(r => r.number === numero);
+            if (existe && !confirm(`Rota ${numero} já existe. Substituir?`)) {
+                return;
+            }
+            
+            if (existe) {
+                const indice = rotasOnibus.findIndex(r => r.number === numero);
+                rotasOnibus.splice(indice, 1);
+            }
+            
+            rotasOnibus.push({
+                number: numero,
+                route: rota,
+                stops: arrayParadas
+            });
+            
+            salvarDados(rotasOnibus);
+            
+            // Limpa o formulário
+            document.getElementById('busNumber').value = '';
+            document.getElementById('busRoute').value = '';
+            document.getElementById('busStops').value = '';
+            
+            // Atualiza dados
+            atualizarEstatisticas();
+            atualizarListaRotas();
+            preencherEnderecosConhecidos();
+            
+            showToast(`✅ Rota ${numero} adicionada com sucesso!`);
+        }
+        
+        function importarCSV(event) {
+            const arquivo = event.target.files[0];
+            if (!arquivo) return;
+            
+            processCSVFile(arquivo);
+        }
+        
+        function processCSVFile(arquivo) {
+            if (!arquivo.name.endsWith('.csv')) {
+                showToast('❌ Arquivo deve ser CSV', 'error');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const texto = e.target.result;
+                    const linhas = texto.split('\n');
+                    let contador = 0;
+                    let erros = 0;
+                    
+                    showToast('📁 Processando arquivo CSV...');
+                    
+                    for (let i = 1; i < linhas.length; i++) { // Pula cabeçalho
+                        const linha = linhas[i];
+                        if (linha.trim()) {
+                            try {
+                                const partes = linha.split(',');
+                                if (partes.length >= 3) {
+                                    const numero = partes[0].trim();
+                                    const rota = partes[1].trim();
+                                    const paradas = partes.slice(2).map(p => p.trim()).filter(p => p);
+                                    
+                                    if (numero && rota && paradas.length > 0) {
+                                        // Remove rota existente se houver
+                                        const indiceExistente = rotasOnibus.findIndex(r => r.number === numero);
+                                        if (indiceExistente !== -1) {
+                                            rotasOnibus.splice(indiceExistente, 1);
+                                        }
+                                        
+                                        rotasOnibus.push({ 
+                                            number: numero, 
+                                            route: rota, 
+                                            stops: paradas 
+                                        });
+                                        contador++;
+                                    } else {
+                                        erros++;
+                                    }
+                                } else {
+                                    erros++;
+                                }
+                            } catch (e) {
+                                erros++;
+                                console.warn(`Erro na linha ${i}:`, e);
+                            }
+                        }
+                    }
+                    
+                    salvarDados(rotasOnibus);
+                    atualizarEstatisticas();
+                    atualizarListaRotas();
+                    preencherEnderecosConhecidos();
+                    
+                    if (contador > 0) {
+                        showToast(`✅ ${contador} rota(s) importada(s)! ${erros > 0 ? `(${erros} erro(s))` : ''}`);
+                    } else {
+                        showToast('❌ Nenhuma rota válida encontrada no arquivo', 'error');
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Erro ao processar CSV:', error);
+                    showToast('❌ Erro ao processar arquivo CSV', 'error');
+                }
+            };
+            
+            reader.readAsText(arquivo);
+        }
+        
+        function excluirRota(indice) {
+            const rota = rotasOnibus[indice];
+            if (confirm(`Excluir rota ${rota.number} - ${rota.route}?`)) {
+                rotasOnibus.splice(indice, 1);
+                salvarDados(rotasOnibus);
+                atualizarEstatisticas();
+                atualizarListaRotas();
+                preencherEnderecosConhecidos();
+                showToast(`🗑️ Rota ${rota.number} excluída!`);
+            }
+        }
+        
+        function exportarBackup() {
+            try {
+                const dados = {
+                    rotas: rotasOnibus,
+                    timestamp: Date.now(),
+                    total: rotasOnibus.length,
+                    version: '2.0'
+                };
+                
+                const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                
+                a.href = url;
+                a.download = `backup_rotas_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showToast('📤 Backup exportado com sucesso!');
+            } catch (error) {
+                console.error('❌ Erro ao exportar:', error);
+                showToast('❌ Erro ao exportar backup', 'error');
+            }
+        }
+        
+        function limparTudo() {
+            if (confirm('⚠️ Apagar TODAS as rotas?') && 
+                confirm('⚠️ Esta ação não pode ser desfeita. Confirma exclusão?')) {
+                
+                rotasOnibus = [];
+                salvarDados(rotasOnibus);
+                atualizarEstatisticas();
+                atualizarListaRotas();
+                preencherEnderecosConhecidos();
+                
+                // Limpa caches
+                coordsCache.clear();
+                enderecosConhecidos.clear();
+                
+                showToast('🗑️ Todos os dados foram limpos!');
+            }
+        }
+        
+        function toggleModoEscuro() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            
+            // Tenta salvar preferência se localStorage disponível
+            try {
+                if (typeof Storage !== 'undefined' && window.localStorage) {
+                    localStorage.setItem('darkMode', isDark);
+                }
+            } catch (e) {
+                console.log('localStorage não disponível para tema');
+            }
+            
+            showToast(isDark ? '🌙 Modo escuro ativado' : '☀️ Modo claro ativado');
+        }
+        
+        function atualizarEstatisticas() {
+            const totalRotas = rotasOnibus.length;
+            const totalParadas = rotasOnibus.reduce((total, rota) => total + rota.stops.length, 0);
+            
+            document.getElementById('totalRoutes').textContent = totalRotas;
+            document.getElementById('totalStops').textContent = totalParadas;
+        }
+        
+        function atualizarListaRotas() {
+            const lista = document.getElementById('routesList');
+            
+            if (rotasOnibus.length === 0) {
+                lista.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #666;">
+                        <h4>📋 Nenhuma rota cadastrada</h4>
+                        <p>Adicione rotas usando o formulário acima ou importe um arquivo CSV</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Ordena rotas por número
+            const rotasOrdenadas = [...rotasOnibus].sort((a, b) => {
+                return parseInt(a.number) - parseInt(b.number);
+            });
+            
+            let html = '';
+            rotasOrdenadas.forEach((onibus) => {
+                const indiceReal = rotasOnibus.findIndex(r => r.number === onibus.number);
+                const preview = onibus.stops.slice(0, 3).join(' → ') + 
+                               (onibus.stops.length > 3 ? ' → ...' : '');
+                
+                html += `
+                    <div class="route-item">
+                        <div class="route-header">
+                            <div>
+                                <div class="route-number">🚌 Linha ${onibus.number}</div>
+                                <div style="font-weight: 600; margin: 5px 0; color: #333;">${onibus.route}</div>
+                                <div style="font-size: 0.9rem; color: #666; background: #f8f9fa; 
+                                           padding: 8px 12px; border-radius: 8px; margin-top: 8px;">
+                                    📍 ${onibus.stops.length} parada${onibus.stops.length !== 1 ? 's' : ''}: ${preview}
+                                </div>
+                            </div>
+                            <div class="route-actions">
+                                <button class="btn btn-secondary btn-small" 
+                                        onclick="mostrarRotaNoMapa(${indiceReal})" 
+                                        title="Ver no mapa">
+                                    🗺️ Mapa
+                                </button>
+                                <button class="btn btn-secondary btn-small" 
+                                        onclick="editarRota(${indiceReal})" 
+                                        title="Editar rota">
+                                    ✏️ Editar
+                                </button>
+                                <button class="btn btn-secondary btn-small" 
+                                        onclick="excluirRota(${indiceReal})" 
+                                        title="Excluir rota"
+                                        style="background: var(--error);">
+                                    🗑️ Excluir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            lista.innerHTML = html;
+        }
+        
+        function mostrarRotaNoMapa(indice) {
+            const rota = rotasOnibus[indice];
+            if (!rota) return;
+            
+            // Simula um resultado de busca para mostrar no mapa
+            const resultadoSimulado = [{
+                onibus: rota,
+                match: {
+                    score: 1,
+                    tipo: 'completa',
+                    parada: rota.stops[0],
+                    distancia: 0,
+                    coords: null,
+                    indice: 0
+                }
+            }];
+            
+            mostrarNoMapa(resultadoSimulado);
+        }
+        
+        function editarRota(indice) {
+            const rota = rotasOnibus[indice];
+            if (!rota) return;
+            
+            document.getElementById('busNumber').value = rota.number;
+            document.getElementById('busRoute').value = rota.route;
+            document.getElementById('busStops').value = rota.stops.join('\n');
+            
+            // Scroll para o formulário
+            document.querySelector('.admin-panel').scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+            
+            showToast(`✏️ Rota ${rota.number} carregada para edição`);
+        }
+        
+        function showToast(message, type = 'success') {
+            // Remove toast existente
+            const existingToast = document.querySelector('.toast');
+            if (existingToast) {
+                existingToast.remove();
+            }
+            
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            // Mostra o toast
+            setTimeout(() => toast.classList.add('show'), 100);
+            
+            // Remove o toast após 4 segundos
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+        
+        // Inicialização do modo escuro
+        try {
+            if (typeof Storage !== 'undefined' && window.localStorage && localStorage.getItem('darkMode') === 'true') {
+                document.body.classList.add('dark-mode');
+            }
+        } catch (e) {
+            console.log('localStorage não disponível para carregar tema');
+        }
+        
+        // Service Worker para cache (opcional)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {
+                console.log('Service Worker não disponível');
+            });
+        }
+        
+        // Detecta conexão
+        window.addEventListener('online', () => showToast('🌐 Conexão restaurada!'));
+        window.addEventListener('offline', () => showToast('📴 Modo offline ativado', 'warning'));
+        
+        console.log('🚀 Sistema de ônibus avançado carregado!');
         
         function adicionarRota() {
             const numero = document.getElementById('busNumber').value.trim();
